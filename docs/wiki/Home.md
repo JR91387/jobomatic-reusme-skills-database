@@ -26,3 +26,8 @@ Job-o-Matic is a local career database. It is one SQLite file on the person's co
 ### For people
 - [[Install-and-First-Run]]: download, open, connect your AI
 - [[Your-Data-and-Privacy]]: where your data lives and who can see it
+
+### For developers
+- [[For-Developers]]: repo layout, tests, scripts, keeping the wiki in sync
+
+The project's front page is the [README](https://github.com/JR91387/jobomatic-reusme-skills-database#readme).
