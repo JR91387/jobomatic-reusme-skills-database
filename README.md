@@ -68,6 +68,10 @@ Copyright (c) 2026 Jerry Reinitz
 
 Built by Jerry Reinitz at Reinitz Industries: bespoke, effective software, developed in Tulsa. https://jerryreinitz.com
 
+---
+
+**More from Reinitz Industries:** [Wagtail Kanban Content Calendar](https://github.com/JR91387/wagtail-kanban-content-calendar) · [Preen](https://github.com/JR91387/Preen-AI-email-sorting) · [/bully](https://github.com/JR91387/claude-skill-bully) · [/bruh](https://github.com/JR91387/claude-skill-bruh) · [Calendar Forge](https://github.com/JR91387/calendar-forge-ics)
+
 <!-- First-run wording checked 2026-11-02:
 macOS 15+ removed Control-click -> Open; use System Settings > Privacy & Security > Open Anyway (Apple developer news quoted at
   https://www.idownloadblog.com/2024/08/07/apple-macos-sequoia-gatekeeper-change-install-unsigned-apps-mac/ , 2024-08-07).
