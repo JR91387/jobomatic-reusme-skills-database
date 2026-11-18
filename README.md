@@ -50,7 +50,7 @@ Unzip it anywhere; Python comes inside. The app isn't paid-for "signed", so your
 A browser tab opens at `http://127.0.0.1:8765/app/`. The number is 8765 (or the next free number shown) in the window that stays open. That address is your own computer. Step-by-step help: [Install and First Run](https://github.com/JR91387/jobomatic-reusme-skills-database/wiki/Install-and-First-Run).
 
 ## Connect your AI
-- **An MCP app** (Claude Desktop, for example) reads and saves your data directly. Claude Desktop has a one-step connector; see [Install and First Run](https://github.com/JR91387/jobomatic-reusme-skills-database/wiki/Install-and-First-Run#5-connect-your-ai).
+- **An MCP app** (Claude Desktop, for example) reads and saves your data directly. Quickest: `uvx job-o-matic-mcp` from PyPI, no download needed. The zip also has a one-step Claude Desktop connector; see [Install and First Run](https://github.com/JR91387/jobomatic-reusme-skills-database/wiki/Install-and-First-Run#5-connect-your-ai).
 - **An AI that runs commands** (Claude Code, Codex and similar): point it at `app/docs/AI_GUIDE.md` or [Quick Start for AI](https://github.com/JR91387/jobomatic-reusme-skills-database/wiki/Quick-Start-for-AI).
 - **Any chat AI:** click the robot button or **Create Resume**, copy the prompt, paste it into your AI, and paste its answer back.
 

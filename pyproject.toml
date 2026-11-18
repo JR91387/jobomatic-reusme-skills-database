@@ -1,0 +1,47 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "job-o-matic"
+version = "1.1.0"
+description = "A local career database your AI uses to write resumes fast. MCP server + local app; one SQLite file on your computer."
+readme = "docs/pypi.md"
+license = "MIT"
+license-files = ["LICENSE", "NOTICE.md"]
+requires-python = ">=3.12"
+authors = [{ name = "Jerry Reinitz" }]
+keywords = ["resume", "resume-builder", "mcp", "model-context-protocol", "ai", "career", "cover-letter", "sqlite", "local-first"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Topic :: Office/Business",
+]
+dependencies = ["mcp>=2.3,<3", "pypdf>=6"]
+
+[project.urls]
+Homepage = "https://github.com/JR91387/jobomatic-reusme-skills-database"
+Documentation = "https://github.com/JR91387/jobomatic-reusme-skills-database/wiki"
+Issues = "https://github.com/JR91387/jobomatic-reusme-skills-database/issues"
+Releases = "https://github.com/JR91387/jobomatic-reusme-skills-database/releases"
+
+[project.scripts]
+job-o-matic = "jobomatic.helper:main"
+job-o-matic-mcp = "jobomatic.mcp_server:main"
+job-o-matic-db = "jobomatic.cli:run"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/jobomatic"]
+exclude = ["**/__pycache__"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"src/db" = "jobomatic/_data/db"
+"src/web" = "jobomatic/_data/web"
+"templates" = "jobomatic/_data/templates"
+"docs/AI_GUIDE.md" = "jobomatic/_data/AI_GUIDE.md"
+
+[tool.hatch.build.targets.sdist]
+include = ["src", "templates", "docs/AI_GUIDE.md", "docs/pypi.md", "LICENSE", "NOTICE.md", "README.md", "requirements.txt", "tests", "pyproject.toml"]

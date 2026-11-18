@@ -2,17 +2,17 @@
 
 # Command line
 
-For AIs that run commands (and for people who like a terminal): `src/db.py` reads and changes the database with plain SQL. In a download it is `app/src/db.py`, run with the bundled Python. Writes must set `updated_by` (see [[Rules-and-Invariants]]); the full column list is in [[Table-Reference]].
+For AIs that run commands (and for people who like a terminal): `job-o-matic-db` (pip install) or `src/db.py` reads and changes the database with plain SQL. In a download it is `app/src/db.py`, run with the bundled Python. Writes must set `updated_by` (see [[Rules-and-Invariants]]); the full column list is in [[Table-Reference]].
 
 ```
 usage: db.py [-h] [--file FILE] [--db DB] [--init] [sql]
 
 Read or change the Job-O-Matic database.
 
-    python3 src/db.py "SELECT id, name FROM people"
-    python3 src/db.py "UPDATE people SET headline='x', updated_by='ai' WHERE id=1"
-    python3 src/db.py --file changes.sql     (all statements saved together, or none)
-    python3 src/db.py --init                 (create a blank database)
+    job-o-matic-db "SELECT id, name FROM people"          (or: python3 src/db.py ...)
+    job-o-matic-db "UPDATE people SET headline='x', updated_by='ai' WHERE id=1"
+    job-o-matic-db --file changes.sql     (all statements saved together, or none)
+    job-o-matic-db --init                 (create a blank database)
 
 Every write must set updated_by to user, ai or app.
 

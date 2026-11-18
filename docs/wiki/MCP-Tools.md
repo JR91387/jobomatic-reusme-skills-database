@@ -2,7 +2,7 @@
 
 # MCP tools
 
-The tools the Job-o-Matic MCP server offers to an MCP app. Start the server with `python src/jobomatic/mcp_server.py [path/to/jobomatic.db]` (or set `JOBOMATIC_DB`). Every write is recorded as `ai`. Start with `schema_guide`; see [[Quick-Start-for-AI]].
+The tools the Job-o-Matic MCP server offers to an MCP app. Start the server with `uvx job-o-matic-mcp` (pip install) or `python src/jobomatic/mcp_server.py [path/to/jobomatic.db]`; set `JOBOMATIC_DB` to choose the file. Every write is recorded as `ai`. Start with `schema_guide`; see [[Quick-Start-for-AI]].
 
 | Tool | Summary |
 |---|---|

@@ -9,11 +9,11 @@ import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
-from jobomatic import resume, store
+from jobomatic import paths, resume, store
 
-WEB_DIR = Path(__file__).resolve().parents[1] / "web"
-GUIDE = Path(__file__).resolve().parents[2] / "docs" / "AI_GUIDE.md"
-HTML_NAME = "Job-o-Matic (view only).html"
+WEB_DIR = paths.resource("web")
+GUIDE = paths.resource("AI_GUIDE.md")
+HTML_NAME = paths.HTML_NAME
 TEXT_CAP = 12000  # characters of one original's extracted text shipped to the page
 # Only the view-only file gets this line; the app serves page.html as it is (edit mode).
 VIEW_BANNER = ('<p class="view-banner">View only: to change anything, ask your AI or open the Job-o-Matic app.</p>'
@@ -145,6 +145,6 @@ def build(db_path, data_dir=None, backup=True):
     texts = json.dumps(original_texts(db_path, data_dir)).replace("<", "\\u003c")
     data_js = f'window.JOBOMATIC_DB = {{updated: "{updated}", b64: "{b64}", texts: {texts}}};\n' + templates_js()
     _write_atomic(data_dir / "viewer_data.js", data_js)
-    html_path = data_dir.parent / HTML_NAME
+    html_path = paths.view_html_path(data_dir)
     _write_atomic(html_path, render_html(data_js))
     return html_path

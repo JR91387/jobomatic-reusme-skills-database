@@ -5,7 +5,14 @@ You are helping one person keep their career facts in Job-o-Matic. You do most o
 ## Three ways in
 
 ### 1. MCP tools (best)
-Any MCP app (Claude Desktop, for example) can connect. The server is `src/jobomatic/mcp_server.py`. It takes the database path as `argv[1]`, or env `JOBOMATIC_DB`, or defaults to `my_data/jobomatic.db` in the install folder.
+Any MCP app (Claude Desktop, for example) can connect.
+
+**Quickest: from PyPI.** No download needed; `uvx` fetches it, and a blank database is created on first run in the user data folder (`~/.local/share/job-o-matic`, `~/Library/Application Support/Job-o-Matic` or `%APPDATA%\Job-o-Matic`; set `JOBOMATIC_HOME` to choose another).
+```json
+{ "mcpServers": { "job-o-matic": { "command": "uvx", "args": ["job-o-matic-mcp"] } } }
+```
+
+**From the zip download:** the server is `app/src/jobomatic/mcp_server.py`. It takes the database path as `argv[1]`, or env `JOBOMATIC_DB`, or defaults to `my_data/jobomatic.db` in the install folder.
 
 Config entry (what `scripts/connect_claude_desktop.py --write` adds for Claude Desktop):
 ```json

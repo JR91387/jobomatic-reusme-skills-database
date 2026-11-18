@@ -88,7 +88,8 @@ def mcp_tools():
                     name = ast.literal_eval(dec.args[0])
                 tools.append((name, node))
     intro = ("The tools the Job-o-Matic MCP server offers to an MCP app. Start the server with "
-             "`python src/jobomatic/mcp_server.py [path/to/jobomatic.db]` (or set `JOBOMATIC_DB`). "
+             "`uvx job-o-matic-mcp` (pip install) or `python src/jobomatic/mcp_server.py [path/to/jobomatic.db]`; "
+             "set `JOBOMATIC_DB` to choose the file. "
              "Every write is recorded as `ai`. Start with `schema_guide`; see [[Quick-Start-for-AI]].\n\n")
     out = [HEADER.format(src="src/jobomatic/mcp_server.py"), "# MCP tools\n\n", intro]
     out.append("| Tool | Summary |\n|---|---|\n")
@@ -115,7 +116,7 @@ def command_line():
                               capture_output=True, text=True, check=True).stdout
     helptext = re.sub(r"^usage: \S+", "usage: db.py", helptext)
     return (HEADER.format(src="src/db.py --help") + "# Command line\n\n"
-            "For AIs that run commands (and for people who like a terminal): `src/db.py` reads and changes "
+            "For AIs that run commands (and for people who like a terminal): `job-o-matic-db` (pip install) or `src/db.py` reads and changes "
             "the database with plain SQL. In a download it is `app/src/db.py`, run with the bundled Python. "
             "Writes must set `updated_by` (see [[Rules-and-Invariants]]); the full column list is in "
             "[[Table-Reference]].\n\n```\n" + helptext.rstrip() + "\n```\n")

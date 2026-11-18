@@ -11,10 +11,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # runs as a fil
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
-from jobomatic import originals, resume, store, viewer
+from jobomatic import originals, paths, resume, store, viewer
 
-# Bundle layout: Job-o-Matic/app/src/jobomatic/mcp_server.py with Job-o-Matic/my_data/ beside app/.
-DEFAULT_DB = Path(__file__).resolve().parents[3] / "my_data" / "jobomatic.db"
+DEFAULT_DB = paths.default_db()  # zip: my_data/ beside app/; pip install: the user data folder
 DB_PATH = Path(sys.argv[1] if len(sys.argv) > 1 else os.environ.get("JOBOMATIC_DB") or DEFAULT_DB)
 DATA_DIR = DB_PATH.parent
 MAX_ROWS = 500
@@ -281,5 +280,11 @@ def build_resume(template: str, track: str = "Original") -> dict:
     return built
 
 
-if __name__ == "__main__":
+def main():
+    """Entry point for `job-o-matic-mcp` (stdio)."""
+    paths.ensure_db(DB_PATH)
     server.run()
+
+
+if __name__ == "__main__":
+    main()

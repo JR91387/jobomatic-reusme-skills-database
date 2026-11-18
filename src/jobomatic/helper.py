@@ -26,13 +26,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # runs as a file path, not a package
 
-from jobomatic import store, viewer
+from jobomatic import paths, store, viewer
 from jobomatic.extract import sniff_type
 from jobomatic.originals import MAX_BYTES, add_original_bytes
 
-# Bundle layout: Job-o-Matic/app/src/jobomatic/helper.py with Job-o-Matic/my_data/ beside app/.
-DEFAULT_DB = Path(__file__).resolve().parents[3] / "my_data" / "jobomatic.db"
-WEB_DIR = Path(__file__).resolve().parents[1] / "web"
+DEFAULT_DB = paths.default_db()  # zip: my_data/ beside app/; pip install: the user data folder
+WEB_DIR = paths.resource("web")
 PORTS = range(8765, 8770)
 IDLE_SECONDS = 20 * 60
 JSON_LIMIT = 1024 * 1024
@@ -343,15 +342,17 @@ class Handler(BaseHTTPRequestHandler):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--db", type=Path, default=DEFAULT_DB)
-    ap.add_argument("--open", action="store_true")
+    ap.add_argument("--open", action="store_true", help="open the browser (always on for a pip install)")
     args = ap.parse_args()
+    if paths.ensure_db(args.db):
+        print(f"Created a blank database at {args.db}", flush=True)
     if not args.db.exists():
         ap.error(f"No database at {args.db}; create it with src/db.py --init")
     viewer.build(args.db, backup=False)  # the day's backup waits for its first change
     server = HelperServer(args.db)
     url = f"http://127.0.0.1:{server.port}/app/"
     print(f"Job-O-Matic helper on {url}", flush=True)
-    if args.open:
+    if args.open or paths.installed():
         webbrowser.open(url)
     try:
         server.serve_forever()
