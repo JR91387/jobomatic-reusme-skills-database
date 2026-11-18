@@ -6,9 +6,10 @@ from html import escape
 from pathlib import Path
 from string import Template
 
+from jobomatic import paths
 from jobomatic.originals import _free_name
 
-TEMPLATES_DIR = Path(__file__).resolve().parents[2] / "templates"
+TEMPLATES_DIR = paths.resource("templates")
 TEMPLATES = ("executive", "navy_bar", "two_column", "structured", "genz")
 
 

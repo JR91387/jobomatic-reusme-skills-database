@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Tests
+        run: python -m unittest
+      - name: Wiki pages match the code
+        run: python scripts/gen_wiki.py --check
+      - name: Build and install the package
+        run: |
+          pip install build
+          python -m build
+          python -m venv /tmp/pkg
+          /tmp/pkg/bin/pip install dist/*.whl
+          JOBOMATIC_HOME=/tmp/jom /tmp/pkg/bin/job-o-matic-db "SELECT count(*) FROM qa"

@@ -34,6 +34,10 @@ A browser tab opens at `http://127.0.0.1:8765/app/`. If 8765 is busy, the next f
 Double-click `Job-o-Matic (view only).html`. It needs no program running.
 
 ## 5. Connect your AI
+- **Quickest: from PyPI** (needs [uv](https://docs.astral.sh/uv/)). Add this to your MCP app's config; it creates your database on first run. `uvx --from job-o-matic job-o-matic` opens the screens.
+  ```json
+{ "mcpServers": { "job-o-matic": { "command": "uvx", "args": ["job-o-matic-mcp"] } } }
+  ```
 - **Best: any MCP app** (Claude Desktop, for example). Run the connector once, then fully quit the app and reopen it. Add `--write` to install; leave it off to preview.
   - Windows: `python\python.exe app\scripts\connect_claude_desktop.py --write`
   - Mac / Linux: `python/bin/python3 app/scripts/connect_claude_desktop.py --write`

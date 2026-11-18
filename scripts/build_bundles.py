@@ -19,7 +19,7 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 PBS_TAG = "20261026"
 PBS_PYTHON = "3.13.18"
 PBS_URL = (
@@ -350,7 +350,9 @@ Four downloads: windows-x64, macos-arm64, macos-x64, linux-x64. Each unzips to a
 The demo seed (`app/src/db/seed_demo.sql`) ships but is not loaded by default.
 
 ## What's new
-First public release.
+- **Install from PyPI.** `uvx job-o-matic-mcp` runs the MCP server with no download; `pip install job-o-matic` adds `job-o-matic` and `job-o-matic-db`. Listed in the official MCP Registry.
+
+From v1.0.0, the first public release:
 - **New data model.** Employers, then positions (a promotion is a second position under the same employer), then items: one typed table for responsibilities, achievements, awards, projects, reviews and more, with numbers in `item_metrics` and source documents linked through `item_originals`.
 - **Built for your AI.** 15 MCP tools (including `save_many` and `add_original`), a plain-language `schema_guide`, and a wiki written for AI agents. What your AI writes appears in the app within seconds, marked "Needs review" until you check it.
 - **Better prompts.** Prompts for chat-only AIs carry your real data and ask for text back; an AI-written file can come back in through Originals.

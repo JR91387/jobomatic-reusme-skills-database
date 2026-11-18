@@ -16,6 +16,9 @@ docs/              AI_GUIDE.md, wiki/ (mirror of this wiki), assets/, screenshot
 demo/              the view-only demo page (generated)
 ```
 
+## Install from PyPI
+`pip install job-o-matic` (or `uvx job-o-matic-mcp`) gives three commands: `job-o-matic` (the screens), `job-o-matic-mcp` (the MCP server) and `job-o-matic-db` (SQL). Installed, the package's files live in `jobomatic/_data/` and data goes to the user data folder (`src/jobomatic/paths.py`). Releases publish to PyPI and the MCP Registry from `.github/workflows/publish.yml` when a GitHub Release is published.
+
 ## Tests
 From the repo root, with `mcp` and `pypdf` installed (a virtual environment is easiest):
 ```

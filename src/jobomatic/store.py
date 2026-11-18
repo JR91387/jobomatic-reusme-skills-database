@@ -8,7 +8,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import NamedTuple
 
-SQL_DIR = Path(__file__).resolve().parent.parent / "db"
+from jobomatic import paths
+
+SQL_DIR = paths.resource("db")
 READ_WORDS = {"SELECT", "WITH", "PRAGMA"}
 TXN_WORDS = {"BEGIN", "COMMIT", "END", "ROLLBACK", "SAVEPOINT", "RELEASE"}
 STOPWORDS = frozenset({
