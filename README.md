@@ -22,6 +22,7 @@ The [wiki](https://github.com/JR91387/jobomatic-reusme-skills-database/wiki) exp
 - **If you are an AI:** start at [Quick Start for AI](https://github.com/JR91387/jobomatic-reusme-skills-database/wiki/Quick-Start-for-AI), then [Data Model](https://github.com/JR91387/jobomatic-reusme-skills-database/wiki/Data-Model), [Table Reference](https://github.com/JR91387/jobomatic-reusme-skills-database/wiki/Table-Reference) and [MCP Tools](https://github.com/JR91387/jobomatic-reusme-skills-database/wiki/MCP-Tools).
 - **If you are a person:** [Install and First Run](https://github.com/JR91387/jobomatic-reusme-skills-database/wiki/Install-and-First-Run) and [Your Data and Privacy](https://github.com/JR91387/jobomatic-reusme-skills-database/wiki/Your-Data-and-Privacy).
 - **If you are a developer:** [For Developers](https://github.com/JR91387/jobomatic-reusme-skills-database/wiki/For-Developers).
+- **Want to help?** Open an issue, then a pull request. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## How your data flows
 Everything lives in one file on your computer. You put facts in. Your AI reads them, saves what it finds and writes from them.
