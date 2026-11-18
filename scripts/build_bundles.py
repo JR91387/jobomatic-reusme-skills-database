@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build the downloadable Job-o-Matic zips into dist/ (one per platform).
 
-    python3 scripts/build_bundles.py | tee ../05_versions/v0.2.0/build.log
+    python3 scripts/build_bundles.py | tee ../05_versions/v1.0.0/build.log
 
 Downloads portable Python (cached in build/cache/), checks it against the
 release's SHA256SUMS, installs requirements.txt wheels, adds the tracked app
@@ -19,7 +19,7 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-VERSION = "0.2.0"
+VERSION = "1.0.0"
 PBS_TAG = "20261026"
 PBS_PYTHON = "3.13.18"
 PBS_URL = (
@@ -350,13 +350,13 @@ Four downloads: windows-x64, macos-arm64, macos-x64, linux-x64. Each unzips to a
 The demo seed (`app/src/db/seed_demo.sql`) ships but is not loaded by default.
 
 ## What's new
-- **Your AI saves for you.** Connect an MCP app such as Claude Desktop (or any AI that can open your file) and what it writes appears in the app within seconds; rows the AI adds are marked "Needs review" until you check them.
-- **Better prompts.** Prompts for chat-only AIs now carry your real data (jobs, accomplishments, extracted document text) and ask for text back.
-- **No lost typing.** Forms keep what you typed through reloads and save conflicts, and ask before discarding changes.
-- **Backups.** The daily copy is taken after your first change of the day; Settings has "Back up now" and "Open my folder".
-- **Easier to use.** Keyboard and screen-reader fixes (focus, dialogs, announcements, labels), phone-width layout, one word "version" throughout, a no-AI line picker in Quick draft, and a "Show AI helpers" switch.
+First public release.
+- **New data model.** Employers, then positions (a promotion is a second position under the same employer), then items: one typed table for responsibilities, achievements, awards, projects, reviews and more, with numbers in `item_metrics` and source documents linked through `item_originals`.
+- **Built for your AI.** 15 MCP tools (including `save_many` and `add_original`), a plain-language `schema_guide`, and a wiki written for AI agents. What your AI writes appears in the app within seconds, marked "Needs review" until you check it.
+- **Better prompts.** Prompts for chat-only AIs carry your real data and ask for text back; an AI-written file can come back in through Originals.
+- **Safer edits.** Remove asks first and removed rows can be restored; a date outside its job shows a warning; forms keep what you typed through reloads and save conflicts.
+- **Backups.** A checked daily copy, plus "Back up now" and "Open my folder" in Settings.
 - **Downloads.** `START HERE.txt`, `README.md` and `PRIVACY.md` at the top of the zip.
-- **Upgrades itself.** A database made by v0.1.0 is brought up to date the first time v0.2.0 opens it.
 
 ## First run
 The launchers are not code-signed, so you will see a warning once:
@@ -366,7 +366,7 @@ The launchers are not code-signed, so you will see a warning once:
 
 ## Known limits
 - Windows and macOS builds have not been run on real machines; only the Linux build was executed.
-- Released before the v0.2.0 persona re-test; findings will go into the next release.
+- Databases made by earlier test builds (before schema version 4) are not upgraded; start a new one.
 - No OCR: scanned PDFs without a text layer yield no extracted text.
 - Launchers are not code-signed; see First run above.
 """
