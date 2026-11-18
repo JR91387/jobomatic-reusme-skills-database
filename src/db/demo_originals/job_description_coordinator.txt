@@ -1,0 +1,15 @@
+Coordinator, Distribution Operations - Brightwater Appliance Co. (invented posting)
+
+Summary
+Run the daily dispatch board and keep orders moving from dock to customer.
+
+Responsibilities
+- Sequence open orders by customer deadline and carrier cut-off.
+- Keep the shared inventory tracker accurate and reconcile it weekly.
+- Train new warehouse hires on the receiving checklist.
+- Work with carriers and vendors to resolve delays.
+
+Requirements
+- 3+ years in dispatch, warehousing or production scheduling.
+- Strong spreadsheet skills; comfortable with warehouse management software.
+- Clear written and spoken communication.

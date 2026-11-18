@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>$name - Resume</title>
+<style>
+@page { margin: 14mm 15mm; }
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+p { margin: 0; }
+ul { margin: 3px 0 0; padding-left: 16px; }
+li { margin: 1.5px 0; }
+.jh { display: flex; justify-content: space-between; gap: 12px; }
+.jt { font-weight: 700; }
+.jd { white-space: nowrap; }
+.job, .rec, .edu { margin: 0 0 7px; break-inside: avoid; }
+.contact span + span::before { content: " | "; }
+a { color: inherit; text-decoration: none; }
+section { break-inside: auto; }
+h2 { break-after: avoid; }
+body { font: 9.6pt/1.38 Carlito, Calibri, "Segoe UI", Arial, sans-serif; color: #1d2430; max-width: 8.5in; margin: 0 auto; padding: .45in .55in; }
+.top { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; border-bottom: 2px solid #1F3A5F; padding-bottom: 6px; }
+h1 { font-size: 21pt; margin: 0; color: #1F3A5F; }
+.headline { color: #4a5568; font-size: 10.5pt; }
+.contact { text-align: right; font-size: 9pt; line-height: 1.5; }
+.contact span { display: block; }
+.contact span + span::before { content: none; }
+h2 { color: #1F3A5F; font-size: 10.5pt; text-transform: uppercase; letter-spacing: .08em; margin: 11px 0 5px; }
+.sk p { display: grid; grid-template-columns: 28% 1fr; gap: 8px; padding: 3px 7px; border-bottom: 1px solid #d5dce6; }
+.sk b { color: #1F3A5F; }
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.jt { color: #1F3A5F; }
+.jo { color: #4a5568; }
+@media print { body { max-width: none; padding: 0; } }
+</style>
+</head>
+<body>
+<div class="top"><div><h1>$name</h1><div class="headline">$headline</div></div><div class="contact">$contact_html</div></div>
+$summary_section
+$experience_section
+$skills_section
+<div class="cols">
+<div>$education_section</div>
+<div>$certifications_section</div>
+</div>
+$awards_section
+$projects_section
+</body>
+</html>

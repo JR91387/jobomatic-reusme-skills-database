@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="author" content="Jerry Reinitz, Reinitz Industries (Tulsa)">
+<meta name="description" content="Job-o-Matic: a local career database your AI uses to write resumes, cover letters and interview answers.">
+<title>Job-o-Matic Resume Builder</title>
+<script>
+  // Theme before first paint (no flash). Saves a choice when given; returns auto, light or dark.
+  // Some file:// pages block storage: then the theme follows the computer.
+  function jomTheme(choice) {
+    var t = "auto";
+    try {
+      if (choice) localStorage.setItem("jobomatic.theme", choice);
+      t = localStorage.getItem("jobomatic.theme") || "auto";
+    } catch (e) {
+      console.warn("Job-o-Matic: browser storage is blocked, so the theme follows the computer.", e);
+    }
+    if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    else document.documentElement.removeAttribute("data-theme");
+    return document.documentElement.getAttribute("data-theme") || "auto";
+  }
+  jomTheme();
+  // "Show AI helpers" (Settings), kept like the theme: false hides the robot buttons and "Tailor with your AI".
+  function jomAi(show) {
+    var on = show === undefined ? true : show;
+    try {
+      if (show !== undefined) localStorage.setItem("jobomatic.ai", show ? "show" : "hide");
+      on = localStorage.getItem("jobomatic.ai") !== "hide";
+    } catch (e) {
+      console.warn("Job-o-Matic: browser storage is blocked, so the AI helpers setting lasts until the page closes.", e);
+    }
+    document.documentElement.classList.toggle("no-ai", !on);
+    return on;
+  }
+  jomAi();
+</script>
+<link rel="icon" href="favicon.svg">
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<a id="skip" class="skip" href="#">Skip to content</a>
+<header class="top">
+  <div class="top-inner">
+    <h1 class="brand"><img class="wordmark wm-light" src="wordmark-light.svg" alt="Job-o-Matic Resume Builder"><img class="wordmark wm-dark" src="wordmark-dark.svg" alt="Job-o-Matic Resume Builder"></h1>
+    <button type="button" id="create-resume" class="create-btn">Create Resume</button>
+    <p class="tagline">Your career data, for your AI to use. Connect an MCP app (Claude Desktop, for example) or copy a prompt; the screens here are for checking and fixing. <a href="#how" id="how-link">How it works</a></p>
+  </div>
+  <div class="trim" aria-hidden="true"></div>
+</header>
+<nav class="tabs" aria-label="Sections">
+  <div class="tabs-wrap">
+    <button type="button" id="tabs-left" class="tabs-arrow left" tabindex="-1" aria-hidden="true">&#8249;</button>
+    <div class="tabs-inner" id="tabs" role="tablist" tabindex="-1"></div>
+    <button type="button" id="tabs-right" class="tabs-arrow right" tabindex="-1" aria-hidden="true">&#8250;</button>
+  </div>
+</nav>
+<div id="errors" class="errors" role="alert" aria-live="assertive"></div>
+<main id="main" class="main" tabindex="-1">
+  <p class="loading">Loading your career file…</p>
+</main>
+<footer class="foot">
+  <span class="mode-box"><span id="mode" class="mode view">View only</span> <span id="mode-note" class="mode-note"></span></span>
+  <span id="updated"></span>
+  <div class="theme-pick" role="radiogroup" aria-labelledby="theme-label">
+    <span id="theme-label">Theme</span>
+    <label><input type="radio" name="theme" value="auto"><span>Auto</span></label>
+    <label><input type="radio" name="theme" value="light"><span>Light</span></label>
+    <label><input type="radio" name="theme" value="dark"><span>Dark</span></label>
+  </div>
+  <label class="toggle"><input type="checkbox" id="show-retired"> Show removed</label>
+</footer>
+<div id="status" class="sr-only" role="status"></div>
+<script src="vendor/sql-wasm.js"></script>
+<script src="resume_render.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

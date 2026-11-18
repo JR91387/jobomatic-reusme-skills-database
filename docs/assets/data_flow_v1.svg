@@ -1,0 +1,102 @@
+<svg viewBox="0 0 900 430" width="900" height="430" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Job-o-Matic data flow">
+<title>How your data flows in Job-o-Matic</title>
+<style>
+.d-box{fill:#FFFFFF;stroke:#C9DFD5;stroke-width:1.5}.d-db{fill:#F2F8F4;stroke:#17695A;stroke-width:2}
+.d-you{fill:#FFFFFF;stroke:#B5891C;stroke-width:2.5}.d-ai{fill:#17695A}
+.d-out{fill:#FFFFFF;stroke:#17695A;stroke-width:1.5;stroke-dasharray:5 4}
+text{font-family:"Source Sans 3",-apple-system,"Segoe UI",Helvetica,Arial,sans-serif}
+.t-title{font-weight:700;font-size:15px;fill:#1B2A26}
+.t-db{font-family:"Lobster Two",Georgia,serif;font-weight:700;font-size:22px;fill:#17695A}
+.t-small{font-size:12.5px;fill:#4D5F59}.t-mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;fill:#4D5F59}
+.t-onai{font-weight:700;font-size:15px;fill:#FFFFFF}.t-onai-s{font-size:12.5px;fill:#FFFFFF;opacity:.88}
+.t-edge{font-weight:600;font-size:12px;fill:#1B2A26}.t-edge-you{font-weight:600;font-size:12px;fill:#8A6512}
+.e{stroke:#4D5F59;stroke-width:1.6;fill:none}.e-ai{stroke:#17695A;stroke-width:2.4;fill:none}
+.e-you{stroke:#B5891C;stroke-width:2.4;fill:none}.e-dash{stroke:#4D5F59;stroke-width:1.4;fill:none;stroke-dasharray:4 4}
+.ah{fill:#4D5F59}.ah-ai{fill:#17695A}.ah-you{fill:#B5891C}.bg{fill:#FCFEFD}
+@media (prefers-color-scheme:dark){
+.bg{fill:#15231F}.d-box,.d-out{fill:#1A2B26}.d-box{stroke:#2E4740}.d-db{fill:#0F1A17;stroke:#7FD3C0}.d-out{stroke:#7FD3C0}
+.d-you{fill:#1A2B26;stroke:#E9C064}.d-ai{fill:#7FD3C0}.t-title,.t-edge{fill:#E3EEE9}.t-db{fill:#7FD3C0}
+.t-small,.t-mono{fill:#A3B6AF}.t-onai,.t-onai-s{fill:#0F1A17}.t-edge-you{fill:#E9C064}
+.e,.e-dash{stroke:#A3B6AF}.ah{fill:#A3B6AF}.e-ai{stroke:#7FD3C0}.ah-ai{fill:#7FD3C0}.e-you{stroke:#E9C064}.ah-you{fill:#E9C064}}
+</style>
+<rect class="bg" width="900" height="430" rx="14"/>
+        <defs>
+          <marker id="m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" class="ah"/></marker>
+          <marker id="ma" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" class="ah-ai"/></marker>
+          <marker id="my" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" class="ah-you"/></marker>
+        </defs>
+
+        <!-- You -->
+        <rect class="d-you" x="16" y="168" width="150" height="86" rx="14"/>
+        <text class="t-title" x="91" y="203" text-anchor="middle">You</text>
+        <text class="t-small" x="91" y="224" text-anchor="middle">seed it, check it</text>
+
+        <!-- DB container -->
+        <rect class="d-db" x="226" y="16" width="430" height="398" rx="18"/>
+        <text class="t-db" x="248" y="50">Job-o-Matic</text>
+        <text class="t-small" x="634" y="48" text-anchor="end">one file on your computer</text>
+
+        <!-- profile -->
+        <rect class="d-box" x="248" y="68" width="386" height="44" rx="10"/>
+        <text class="t-title" x="266" y="95">Your profile</text>
+        <text class="t-small" x="616" y="95" text-anchor="end">name, contact, links, photo</text>
+
+        <!-- your story chain -->
+        <text class="t-small" x="248" y="140">Your story</text>
+        <rect class="d-box" x="248" y="150" width="84" height="54" rx="10"/>
+        <text class="t-title" x="290" y="176" text-anchor="middle">Employers</text>
+        <rect class="d-box" x="348" y="150" width="84" height="54" rx="10"/>
+        <text class="t-title" x="390" y="176" text-anchor="middle">Positions</text>
+        <rect class="d-box" x="448" y="150" width="84" height="54" rx="10"/>
+        <text class="t-title" x="490" y="176" text-anchor="middle">Items</text>
+        <rect class="d-box" x="548" y="150" width="86" height="54" rx="10"/>
+        <text class="t-title" x="591" y="172" text-anchor="middle">Resume</text>
+        <text class="t-title" x="591" y="190" text-anchor="middle">lines</text>
+        <text class="t-mono" x="290" y="194" text-anchor="middle">where</text>
+        <text class="t-mono" x="390" y="194" text-anchor="middle">title, dates</text>
+        <text class="t-mono" x="490" y="194" text-anchor="middle">what you did</text>
+        <path class="e" d="M332 177H346" marker-end="url(#m)"/>
+        <path class="e" d="M432 177H446" marker-end="url(#m)"/>
+        <path class="e" d="M532 177H546" marker-end="url(#m)"/>
+
+        <!-- skills etc -->
+        <rect class="d-box" x="248" y="230" width="120" height="44" rx="10"/>
+        <text class="t-title" x="308" y="257" text-anchor="middle">Skills</text>
+        <rect class="d-box" x="381" y="230" width="120" height="44" rx="10"/>
+        <text class="t-title" x="441" y="257" text-anchor="middle">Education</text>
+        <rect class="d-box" x="514" y="230" width="120" height="44" rx="10"/>
+        <text class="t-title" x="574" y="257" text-anchor="middle">Interview Q&amp;A</text>
+
+        <!-- originals -->
+        <rect class="d-box" x="248" y="330" width="386" height="62" rx="10"/>
+        <text class="t-title" x="266" y="356">Your original files</text>
+        <text class="t-small" x="266" y="376">old resumes, reviews, job posts, kept unedited</text>
+        <path class="e-dash" d="M490 330V206" marker-end="url(#m)"/>
+        <text class="t-edge" x="498" y="302">facts pulled out</text>
+
+        <!-- You -> DB -->
+        <path class="e-you" d="M166 196H244" marker-end="url(#my)"/>
+        <text class="t-edge-you" x="172" y="186">seeds</text>
+        <path class="e-you" d="M120 254C120 340 180 361 244 361" marker-end="url(#my)"/>
+        <text class="t-edge-you" x="132" y="318">drops in files</text>
+        <path class="e-you" d="M244 226H166" marker-end="url(#my)"/>
+        <text class="t-edge-you" x="172" y="244">checks</text>
+
+        <!-- AI -->
+        <rect class="d-ai" x="720" y="96" width="164" height="96" rx="14"/>
+        <text class="t-onai" x="802" y="134" text-anchor="middle">Your AI</text>
+        <text class="t-onai-s" x="802" y="156" text-anchor="middle">Claude Desktop (MCP)</text>
+        <text class="t-onai-s" x="802" y="174" text-anchor="middle">or any chat AI</text>
+        <path class="e-ai" d="M656 124H716" marker-end="url(#ma)"/>
+        <text class="t-edge" x="664" y="116">reads</text>
+        <path class="e-ai" d="M716 164H660" marker-end="url(#ma)"/>
+        <text class="t-edge" x="664" y="182">saves</text>
+
+        <!-- output -->
+        <rect class="d-out" x="720" y="262" width="164" height="104" rx="14"/>
+        <text class="t-title" x="802" y="296" text-anchor="middle">Resumes</text>
+        <text class="t-title" x="802" y="318" text-anchor="middle">Cover letters</text>
+        <text class="t-title" x="802" y="340" text-anchor="middle">Interview answers</text>
+        <path class="e-ai" d="M802 192V258" marker-end="url(#ma)"/>
+        <text class="t-edge" x="810" y="232">writes</text>
+      </svg>

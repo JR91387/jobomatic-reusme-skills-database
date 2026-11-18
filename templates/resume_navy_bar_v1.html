@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>$name - Resume</title>
+<style>
+@page { margin: 12mm 0; }
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+p { margin: 0; }
+ul { margin: 3px 0 0; padding-left: 16px; }
+li { margin: 1.5px 0; }
+.jh { display: flex; justify-content: space-between; gap: 12px; }
+.jt { font-weight: 700; }
+.jd { white-space: nowrap; }
+.job, .rec, .edu { margin: 0 0 7px; break-inside: avoid; }
+.contact span + span::before { content: " | "; }
+a { color: inherit; text-decoration: none; }
+section { break-inside: auto; }
+h2 { break-after: avoid; }
+body { font: 10pt/1.4 Carlito, Calibri, "Segoe UI", Arial, sans-serif; color: #1d2430; max-width: 8.5in; margin: 0 auto; }
+header { background: #1F3A5F; color: #fff; padding: .38in .6in .26in; }
+h1 { font-size: 24pt; margin: 0; letter-spacing: .01em; }
+.headline { font-size: 11pt; opacity: .92; margin-top: 2px; }
+.contact { font-size: 9.3pt; margin-top: 6px; opacity: .92; }
+main { padding: .18in .6in .45in; }
+h2 { color: #1F3A5F; font-size: 11pt; text-transform: uppercase; letter-spacing: .08em; margin: 11px 0 4px; padding-bottom: 2px; border-bottom: 1.5px solid #1F3A5F; }
+.jt { color: #1F3A5F; }
+.jo { color: #4a5568; }
+.sk p { margin: 1px 0; }
+.sk b { color: #1F3A5F; margin-right: 6px; }
+@media print { body { max-width: none; } }
+</style>
+</head>
+<body>
+<header><h1>$name</h1><div class="headline">$headline</div><div class="contact">$contact_html</div></header>
+<main>
+$summary_section
+$skills_section
+$experience_section
+$education_section
+$certifications_section
+$awards_section
+$projects_section
+</main>
+</body>
+</html>

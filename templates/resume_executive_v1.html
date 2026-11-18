@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>$name - Resume</title>
+<style>
+@page { margin: 14mm 15mm; }
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+p { margin: 0; }
+ul { margin: 3px 0 0; padding-left: 16px; }
+li { margin: 1.5px 0; }
+.jh { display: flex; justify-content: space-between; gap: 12px; }
+.jt { font-weight: 700; }
+.jd { white-space: nowrap; }
+.job, .rec, .edu { margin: 0 0 7px; break-inside: avoid; }
+.contact span + span::before { content: " | "; }
+a { color: inherit; text-decoration: none; }
+section { break-inside: auto; }
+h2 { break-after: avoid; }
+body { font: 10.3pt/1.38 Georgia, "Times New Roman", serif; color: #1d2430; max-width: 8.5in; margin: 0 auto; padding: .55in .65in; }
+h1 { font-size: 21pt; font-weight: 400; letter-spacing: .04em; text-align: center; margin: 0; }
+.headline { text-align: center; font-style: italic; margin: 2px 0; }
+.contact { text-align: center; font-size: 9.4pt; margin-bottom: 6px; }
+h2 { font-size: 10.5pt; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; border-bottom: 1px solid #1d2430; margin: 11px 0 5px; padding-bottom: 1px; }
+.jo { font-style: italic; }
+.sk p { margin: 1px 0; }
+.sk b { margin-right: 6px; }
+@media print { body { max-width: none; padding: 0; } }
+</style>
+</head>
+<body>
+<header><h1>$name</h1><div class="headline">$headline</div><div class="contact">$contact_html</div></header>
+$summary_section
+$experience_section
+$skills_section
+$education_section
+$certifications_section
+$awards_section
+$projects_section
+</body>
+</html>

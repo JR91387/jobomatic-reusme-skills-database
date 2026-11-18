@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>$name - Resume</title>
+<style>
+@page { margin: 12mm 14mm; }
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+p { margin: 0; }
+ul { margin: 3px 0 0; padding-left: 16px; }
+li { margin: 1.5px 0; }
+.jh { display: flex; justify-content: space-between; gap: 12px; }
+.jt { font-weight: 700; }
+.jd { white-space: nowrap; }
+.job, .rec, .edu { margin: 0 0 7px; break-inside: avoid; }
+.contact span + span::before { content: " | "; }
+a { color: inherit; text-decoration: none; }
+section { break-inside: auto; }
+h2 { break-after: avoid; }
+body { font: 10pt/1.5 Nunito, Poppins, "Segoe UI", Arial, sans-serif; color: #1f2330; max-width: 8.5in; margin: 0 auto; padding: .45in .55in; }
+.hero { background: linear-gradient(120deg, #FFE3D3, #E5E1FF); border-radius: 18px; padding: 18px 22px; }
+h1 { font-size: 25pt; margin: 0; letter-spacing: -.01em; }
+.headline { font-weight: 700; color: #5B3FD6; margin: 2px 0 6px; }
+.sum { font-size: 10.5pt; }
+.contact span { display: inline-block; background: #fff; border-radius: 999px; padding: 2px 10px; margin: 3px 4px 0 0; font-size: 9pt; border: 1px solid #e3dcff; }
+.contact span + span::before { content: none; }
+h2 { font-size: 12pt; margin: 14px 0 5px; color: #1f2330; }
+.job, .rec, .edu { border: 1px solid #ece6ff; border-radius: 14px; padding: 9px 13px; margin: 0 0 8px; background: #fff; }
+.jt { color: #5B3FD6; }
+.jo { color: #6b6f80; font-size: 9.4pt; }
+.tags span { display: inline-block; background: #F1EDFF; color: #4a34b8; border-radius: 999px; padding: 2px 10px; margin: 3px 4px 0 0; font-size: 9.2pt; font-weight: 700; }
+@media print { body { max-width: none; padding: 0; background: none; } }
+</style>
+</head>
+<body>
+<div class="hero"><h1>$name</h1><div class="headline">$headline</div><div class="contact">$contact_html</div></div>
+$summary_section
+$experience_section
+$skills_tags_section
+$education_section
+$certifications_section
+$awards_section
+$projects_section
+</body>
+</html>

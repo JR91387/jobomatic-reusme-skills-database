@@ -1,0 +1,79 @@
+/* Job-o-Matic Resume Builder design tokens. Light theme.
+   Fonts: Lobster Two (display: headings and wordmark only) + Source Sans 3 (body), SIL OFL 1.1. */
+@font-face{font-family:"Lobster Two";src:url("fonts/lobster-two-700.woff2") format("woff2");font-weight:700;font-style:normal;font-display:swap}
+@font-face{font-family:"Source Sans 3";src:url("fonts/source-sans-3-400.woff2") format("woff2");font-weight:400;font-style:normal;font-display:swap}
+@font-face{font-family:"Source Sans 3";src:url("fonts/source-sans-3-600.woff2") format("woff2");font-weight:600;font-style:normal;font-display:swap}
+@font-face{font-family:"Source Sans 3";src:url("fonts/source-sans-3-700.woff2") format("woff2");font-weight:700;font-style:normal;font-display:swap}
+:root{
+  color-scheme: light dark;
+  --logo-light: block;
+  --logo-dark: none;
+  --bg: #F2F8F4;
+  --surface: #FCFEFD;
+  --surface-raised: #FFFFFF;
+  --text: #1B2A26;
+  --text-muted: #4D5F59;
+  --accent: #17695A;
+  --accent-contrast: #FFFFFF;
+  --accent-2: #F7D96E;
+  --border: #C9DFD5;
+  --chrome: linear-gradient(180deg,#FFFFFF 0%,#E2ECE8 34%,#A9BCB5 50%,#EBF2EF 64%,#C7D6D0 100%);
+  --ok: #2F6B2A;
+  --warn: #8A5000;
+  --danger: #B42318;
+  --danger-bg: #FFF1F2;
+  --focus-ring: #2C55C9;
+  --font-display: "Lobster Two", "Source Sans 3", system-ui, sans-serif;
+  --font-body: "Source Sans 3", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --radius: 18px;
+  --shadow: 0 1px 2px rgba(27,42,38,.08), 0 6px 16px rgba(27,42,38,.07);
+}
+
+/* Dark: same roles. Follows the computer unless the footer Theme picks Light or Dark (data-theme on <html>).
+   All text pairs >= 4.5:1 (lowest: muted on raised 7.5:1).
+   The two dark blocks below must stay identical (tests/test_viewer.py checks). */
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --logo-light: none;
+    --logo-dark: block;
+    --bg: #101A17;
+    --surface: #16231F;
+    --surface-raised: #1C2B27;
+    --text: #E6F0EB;
+    --text-muted: #A9BEB5;
+    --accent: #5CC2AC;
+    --accent-contrast: #0C1714;
+    --accent-2: #F2D46A;
+    --border: #2E423C;
+    --chrome: linear-gradient(180deg,#2A3A35 0%,#1C2B27 40%,#3A4E47 52%,#1C2B27 66%,#24342F 100%);
+    --ok: #86CF92;
+    --warn: #E9B95F;
+    --danger: #F29A8C;
+    --danger-bg: #3A2220;
+    --focus-ring: #93B4FF;
+    --shadow: 0 1px 2px rgba(0,0,0,.35), 0 6px 16px rgba(0,0,0,.30);
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --logo-light: none;
+  --logo-dark: block;
+  --bg: #101A17;
+  --surface: #16231F;
+  --surface-raised: #1C2B27;
+  --text: #E6F0EB;
+  --text-muted: #A9BEB5;
+  --accent: #5CC2AC;
+  --accent-contrast: #0C1714;
+  --accent-2: #F2D46A;
+  --border: #2E423C;
+  --chrome: linear-gradient(180deg,#2A3A35 0%,#1C2B27 40%,#3A4E47 52%,#1C2B27 66%,#24342F 100%);
+  --ok: #86CF92;
+  --warn: #E9B95F;
+  --danger: #F29A8C;
+  --danger-bg: #3A2220;
+  --focus-ring: #93B4FF;
+  --shadow: 0 1px 2px rgba(0,0,0,.35), 0 6px 16px rgba(0,0,0,.30);
+}
+:root[data-theme="light"]{color-scheme: light}
