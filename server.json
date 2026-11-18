@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.JR91387/job-o-matic",
   "title": "Job-o-Matic",
-  "description": "Local career database your AI keeps current and writes résumés, cover letters and interview answers from.",
+  "description": "Local career database your AI keeps current and writes résumés from.",
   "repository": {
     "url": "https://github.com/JR91387/jobomatic-reusme-skills-database",
     "source": "github"
@@ -14,11 +14,23 @@
       "identifier": "job-o-matic",
       "version": "1.1.0",
       "runtimeHint": "uvx",
-      "transport": { "type": "stdio" },
+      "transport": {
+        "type": "stdio"
+      },
       "packageArguments": [],
       "environmentVariables": [
-        { "name": "JOBOMATIC_DB", "description": "Path to your Job-o-Matic database file (optional; default is your user data folder).", "isRequired": false, "isSecret": false },
-        { "name": "JOBOMATIC_HOME", "description": "Folder for your Job-o-Matic data (optional).", "isRequired": false, "isSecret": false }
+        {
+          "name": "JOBOMATIC_DB",
+          "description": "Path to your Job-o-Matic database file (optional; default is your user data folder).",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "JOBOMATIC_HOME",
+          "description": "Folder for your Job-o-Matic data (optional).",
+          "isRequired": false,
+          "isSecret": false
+        }
       ]
     }
   ]

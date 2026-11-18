@@ -5,6 +5,7 @@ name: Publish
 on:
   release:
     types: [published]
+  workflow_dispatch:  # re-run by hand; an already-uploaded PyPI version is skipped
 
 permissions:
   contents: read
@@ -21,7 +22,9 @@ jobs:
         run: |
           v=$(python -c "import tomllib;print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
           s=$(python -c "import json;print(json.load(open('server.json'))['version'])")
-          test "v$v" = "${GITHUB_REF_NAME}" || { echo "tag ${GITHUB_REF_NAME} != pyproject v$v"; exit 1; }
+          if [ "${GITHUB_EVENT_NAME}" = "release" ]; then
+            test "v$v" = "${GITHUB_REF_NAME}" || { echo "tag ${GITHUB_REF_NAME} != pyproject v$v"; exit 1; }
+          fi
           test "$v" = "$s" || { echo "server.json $s != pyproject $v"; exit 1; }
       - name: Build
         run: pip install build && python -m build
@@ -42,6 +45,8 @@ jobs:
           name: dist
           path: dist/
       - uses: pypa/gh-action-pypi-publish@v1.14.3
+        with:
+          skip-existing: true
 
   mcp-registry:
     needs: pypi
