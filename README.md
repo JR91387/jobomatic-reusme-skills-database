@@ -108,8 +108,6 @@ docs/              AI_GUIDE.md, wiki/ (mirror of the GitHub wiki)
 ```
 Tests: `python -m unittest` from this folder (needs `mcp` and `pypdf` installed).
 
-## From the archives
-
 ![A 1950s-style magazine ad: Your Career, on Autopilot! A smiling woman and a friendly robot holding a résumé.](docs/assets/ad_page1_v1.jpg)
 
 ## Licence
