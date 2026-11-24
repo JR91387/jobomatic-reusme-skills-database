@@ -34,21 +34,36 @@ Yellow is what you do; green is what your AI does. An employer can have several 
 ![Create Resume: pick a style and version, preview it, or hand the job to your AI.](docs/screenshots/create_resume.png)
 
 ## Get yours
-Pick the one for your computer from the [newest release](../../releases/latest):
+**Windows** (PowerShell):
+
+```
+irm https://raw.githubusercontent.com/JR91387/jobomatic-reusme-skills-database/main/install.ps1 | iex
+```
+
+**Mac / Linux:**
+
+```
+curl -LsSf https://raw.githubusercontent.com/JR91387/jobomatic-reusme-skills-database/main/install.sh | sh
+```
+
+It installs Job-o-Matic and opens it. On first run it adds itself to your Start Menu or app menu (`job-o-matic --remove-shortcut` undoes that). It opens at `http://127.0.0.1:8765/jobomatic/`, a page on your own computer. It checks for updates once a day; you can turn that off in Settings.
+
+**Or download a zip** from the [newest release](../../releases/latest):
 
 - Windows: `Job-o-Matic_v<version>_windows-x64.zip`
 - Mac with an Apple chip (M1, M2, M3...): `Job-o-Matic_v<version>_macos-arm64.zip`
 - Mac with Intel: `Job-o-Matic_v<version>_macos-x64.zip`
 - Linux: `Job-o-Matic_v<version>_linux-x64.zip`
 
-## Open it
 Unzip it anywhere; Python comes inside. The app isn't paid-for "signed", so your computer warns you once:
 
 - **Windows:** Extract All, double-click `Job-o-Matic.bat`, then **More info → Run anyway**.
 - **Mac:** double-click `Job-o-Matic.command`, click **Done**, then **System Settings → Privacy & Security → Open Anyway**.
 - **Linux:** `chmod +x job-o-matic.sh`, then `./job-o-matic.sh`.
 
-A browser tab opens at `http://127.0.0.1:8765/app/`. The number is 8765 (or the next free number shown) in the window that stays open. That address is your own computer. Step-by-step help: [Install and First Run](https://github.com/JR91387/jobomatic-reusme-skills-database/wiki/Install-and-First-Run).
+**Manual options:** `pip install job-o-matic`, then run `job-o-matic`. Or `uvx job-o-matic-mcp` to run just the MCP server.
+
+The number is 8765 (or the next free number shown) in the window that stays open. Step-by-step help: [Install and First Run](https://github.com/JR91387/jobomatic-reusme-skills-database/wiki/Install-and-First-Run).
 
 ## Connect your AI
 - **An MCP app** (Claude Desktop, for example) reads and saves your data directly. Quickest: `uvx job-o-matic-mcp` from PyPI, no download needed. The zip also has a one-step Claude Desktop connector; see [Install and First Run](https://github.com/JR91387/jobomatic-reusme-skills-database/wiki/Install-and-First-Run#5-connect-your-ai).
@@ -58,7 +73,7 @@ A browser tab opens at `http://127.0.0.1:8765/app/`. The number is 8765 (or the 
 Then ask something like: *"Read my old resume in Job-o-Matic's originals and fill in my experience."*
 
 ## Your data
-Everything stays in the `my_data` folder next to the app, backed up daily. Nothing is sent anywhere. Details: [Your Data and Privacy](https://github.com/JR91387/jobomatic-reusme-skills-database/wiki/Your-Data-and-Privacy) and `PRIVACY.md`.
+Everything stays in the `my_data` folder next to the app, backed up daily. Your data is never sent anywhere; the only thing the app contacts is the daily update check. Details: [Your Data and Privacy](https://github.com/JR91387/jobomatic-reusme-skills-database/wiki/Your-Data-and-Privacy) and `PRIVACY.md`.
 
 ![A 1950s-style magazine ad: Your Career, on Autopilot! A smiling woman and a friendly robot holding a résumé.](docs/assets/ad_page1_v1.jpg)
 

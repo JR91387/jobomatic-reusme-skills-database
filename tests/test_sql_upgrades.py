@@ -53,7 +53,7 @@ class TestResumeJson(DemoCase):
                 self.assertEqual(set(line["item"]["metrics"][0]), {"id", "label", "value", "unit", "as_of"})
                 self.assertEqual(len(doc["skills"]), 7)
                 self.assertEqual([e["year"] for e in doc["education"]], ["2020", "2016"])
-                self.assertEqual(len(doc["links"]), 2)
+                self.assertEqual(len(doc["links"]), 3)  # LinkedIn, website, portfolio
                 # the person's own items (not Responsibility/Achievement), newest first: Award, Review, Project, unattached Volunteer
                 self.assertEqual([(i["id"], i["kind"]) for i in doc["items"]],
                                  [(14, "Award"), (13, "Review"), (15, "Project"), (17, "Volunteer")])

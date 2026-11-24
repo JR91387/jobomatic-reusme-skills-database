@@ -24,8 +24,35 @@ def _e(value):
     return escape(value or "")
 
 
+_CC2 = re.compile(r"(20|27|3[0-46-9]|4[013-9]|5[1-8]|6[0-6]|8[1246]|9[0-58])")
+
+
+def _phone(value):
+    """Phone as '(555) 123-4567' (US/Canada) or '+44 20 7946 0958'; mirrors formatPhone in src/web/resume_render.js.
+    The server keeps E.164; the browser's Phone style setting only changes the on-screen preview."""
+    raw = (value or "").strip()
+    digits = re.sub(r"\D", "", raw)
+    plus = raw[:1] == "+"
+    if not plus and len(digits) == 11 and digits[0] == "1":
+        digits = digits[1:]
+    if not plus and len(digits) == 10:
+        plus, digits = True, "1" + digits
+    if not plus or not 8 <= len(digits) <= 15:
+        return raw
+    m = re.fullmatch(r"1(\d{3})(\d{3})(\d{4})", digits)
+    if m:
+        return f"({m[1]}) {m[2]}-{m[3]}"
+    cc = 1 if digits[0] in "17" else 2 if _CC2.match(digits) else 3
+    national, groups = digits[cc:], []
+    while len(national) > 4:
+        groups.insert(0, national[-4:])
+        national = national[:-4]
+    groups.insert(0, national)
+    return f"+{digits[:cc]} " + " ".join(groups)
+
+
 def _contact(person, links):
-    parts = [person["location"], person["phone"], person["email"]]
+    parts = [person["location"], _phone(person["phone"]), person["email"]]
     html = [f"<span>{_e(p)}</span>" for p in parts if p]
     for link in links:
         html.append(f'<span><a href="{_e(link["url"])}">{_e(link["label"] or link["url"])}</a></span>')

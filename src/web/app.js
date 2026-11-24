@@ -34,10 +34,15 @@
   // Edit-form fields per table: [column, label, kind, options]. kind: text | area | select | number | date
   var ITEM_KINDS = ["Project", "Responsibility", "Achievement", "Award", "Publication", "Volunteer", "Speaking",
     "Recommendation", "Review", "Kudos"];
+  var PHONE_STYLE_LABELS = [["paren", "(555) 123-4567"], ["dash", "555-123-4567"], ["dot", "555.123.4567"], ["intl", "+1 555 123 4567"]];
+  var WORK_AUTH = ["", "Authorized", "Needs sponsorship", "Other"];
+  var SKILL_CATEGORIES = ["", "Skill", "System", "Application/Software", "Method", "Standard"];
   var FORMS = {
-    people: [["name", "What should we call you? (required)"], ["full_name", "Full name"], ["headline", "Headline"],
-      ["location", "Location"], ["email", "Email"], ["phone", "Phone"], ["linkedin", "LinkedIn URL"],
-      ["work_authorization", "Work authorization"], ["summary", "Summary", "area"]],
+    // Order here is the page order and the Tab order (the form grid does not reorder). LinkedIn lives under Links.
+    people: [["first_name", "First name (required)"], ["last_name", "Last name (required)"], ["headline", "Headline"],
+      ["location", "Location"], ["email", "Email"], ["phone", "Phone"],
+      ["work_auth_status", "Work authorization", "select", WORK_AUTH], ["work_auth_country", "Country you can work in"],
+      ["work_authorization", "Details"], ["summary", "Summary", "area"]],
     links: [["kind", "Kind", "select", ["LinkedIn", "GitHub", "Website", "Portfolio", "Other"]],
       ["label", "Label"], ["url", "Web address"], ["status", "Status", "select", ["Active", "Deprecated"]]],
     employers: [["name", "Employer"], ["location", "Location"], ["website", "Website"],
@@ -57,7 +62,7 @@
     bullet_variants: [["wording", "Resume line", "area"], ["item_id", "Item", "item"],
       ["track", "Line's version", "track"], ["angle", "Focus"], ["length", "Length", "select", ["", "Short", "Long", "Story"]],
       ["status", "Status", "select", REVIEW]],
-    skills: [["name", "Skill"], ["category", "Category", "select", ["", "Skill", "System", "Method", "Standard"]],
+    skills: [["name", "Skill"], ["category", "Category", "select", SKILL_CATEGORIES],
       ["status", "Status", "select", REVIEW]],
     education: [["name", "Name"], ["kind", "Kind", "select", ["Degree", "Course", "Certification", "Training", "Self-study"]],
       ["institution", "School or provider"], ["year", "Year"], ["status", "Status", "select", REVIEW]],
@@ -81,7 +86,7 @@
     "education", "qa", "tracks"];
   // Fields that may not be blank, with the database's own wording (src/db/schema.sql) where it has one.
   var REQUIRED = {
-    people: { name: "Name cannot be empty" }, links: { url: "Web address cannot be empty" },
+    people: { first_name: "First name cannot be empty", last_name: "Last name cannot be empty" }, links: { url: "Web address cannot be empty" },
     employers: { name: "Employer cannot be empty" },
     positions: { title: "Job title cannot be empty", employer_id: "Choose an employer" },
     item_metrics: { value: "The number or result cannot be empty" },
@@ -95,8 +100,11 @@
   var SHOWN = { Deprecated: "Removed", Archived: "Removed", Retired: "Removed", "Text read": "Waiting for your AI", "Not yet": "Waiting for your AI",
     "Typed in": "Typed in by you", Story: "Story (interview)" };
   // Hints under form fields and placeholders.
-  var PLACEHOLDER = { work_authorization: "e.g. Authorized to work in the US", track: null };
-  var HINTS = { angle: "What this wording stresses, e.g. leadership or cost savings" };
+  var PLACEHOLDER = { work_authorization: "e.g. Student visa until 2028", work_auth_country: "e.g. United States",
+    phone: "e.g. (555) 123-4567", track: null };
+  var HINTS = { angle: "What this wording stresses, e.g. leadership or cost savings",
+    work_auth_status: "Can you legally work in this country without the employer sponsoring a visa?",
+    phone: "Any style works: we tidy it when you leave the field." };
   var HASH_ALIAS = { awards: "items", reviews: "items" };
   // Database and network errors in plain words. Unknown ones: "Couldn't save: <message>".
   var PLAIN_ERRORS = [
@@ -200,6 +208,20 @@
     var out = new Uint8Array(s.length);
     for (var i = 0; i < s.length; i++) out[i] = s.charCodeAt(i);
     return out;
+  }
+  // Phone as the person chose to see it (Settings > Phone style). The stored value stays E.164; see formatPhone in resume_render.js.
+  function fmtPhone(v) {
+    var f = window.JOM && window.JOM.formatPhone;
+    return f ? f(v, phoneStyle()) : v || "";
+  }
+  function phoneStyle(choice) { return typeof window.jomPhoneStyle === "function" ? window.jomPhoneStyle(choice) : "paren"; }
+  // "Authorized · United States", "Needs sponsorship · Canada", or the note for Other.
+  function workAuthText(p) {
+    var what = p.work_auth_status === "Other" ? p.work_authorization || "Other" : p.work_auth_status || p.work_authorization;
+    return joinNonEmpty([what, p.work_auth_country], " · ");
+  }
+  function personName(p) {
+    return joinNonEmpty([p.first_name, p.last_name], " ") || p.full_name || p.name || "";
   }
   function activePerson() { return q("SELECT * FROM people WHERE status = 'Active'")[0] || null; }
 
@@ -335,6 +357,25 @@
     }
     var when = updated ? new Date(updated).toLocaleString() : "";
     document.getElementById("updated").textContent = when ? (EDIT ? "Data loaded " : "Snapshot from ") + when : "";
+  }
+
+  // Footer: where the data is and how the AI app reaches it (from the app's JOBOMATIC_INFO; the view-only file has none).
+  function renderConnection() {
+    var box = document.getElementById("conn"), info = connInfo();
+    if (!box) return;
+    box.textContent = "";
+    if (!info) return;
+    function row(label, value, what) {
+      var msg = h("span", { class: "small", "aria-live": "polite" });
+      var btn = h("button", { type: "button", class: "btn ghost small", "aria-label": "Copy " + what, onclick: function () {
+        copyText(value, function () { msg.className = "small ok-msg"; msg.textContent = "Copied"; },
+          function () { msg.className = "small"; msg.textContent = "Select the text and press Ctrl+C (Cmd+C on Mac)"; });
+      } }, "Copy");
+      return h("div", { class: "conn-row" }, h("span", null, label + " "), h("code", null, value), " ", btn, " ", msg);
+    }
+    box.appendChild(row("Data folder:", info.data_folder, "data folder"));
+    if (info.mcp) box.appendChild(row("MCP: " + info.mcp.name + " \u00b7", info.mcp.display, "MCP start command"));
+    box.appendChild(h("div", { class: "conn-row" }, "v" + info.version));
   }
 
   // ARIA tabs: one Tab stop (the selected tab), arrow keys / Home / End move between tabs. Built once, so focus stays put.
@@ -479,7 +520,7 @@
 
   // section key: [title, table, what to ask for]
   var SECTIONS = {
-    people: ["Profile", "people", "full name, headline, location, email, phone, LinkedIn, work authorization, short summary in my words"],
+    people: ["Profile", "people", "first name, last name, headline, location, email, phone, work authorization (Authorized / Needs sponsorship / Other, plus the country), short summary in my words; LinkedIn goes under Links"],
     links: ["Links", "links", "LinkedIn, GitHub, portfolio, website (kind, label, url)"],
     skills: ["Skills", "skills", "skills, systems, methods, standards I really used; link each to its positions or items via skill_links"],
     education: ["Education and training", "education", "degrees, courses, certifications, training (kind, name, institution, year)"],
@@ -488,7 +529,7 @@
     metrics: ["Numbers", "item_metrics", "the numbers that prove an item (label, value as quoted, unit, as_of), many per item; never a number the sources do not give"],
     bullet_variants: ["Resume Lines", "bullet_variants", "lines for items that have few or none, for each version and length (Short, Long, Story)"],
     qa: ["Interview questions", "qa", "questions I keep meeting (seeded = 0) and answers to the open ones"],
-    originals: ["Originals", "originals", "index unlisted files in my_data/originals/, then take the facts out (list_originals, read_original, mark_extracted)"]
+    originals: ["Originals", "originals", "index unlisted files in the originals folder of my data folder, then take the facts out (list_originals, read_original, mark_extracted)"]
   };
   var CHAT_ONLY = "If you can't open files on this computer, that's fine: just give me the text and I'll paste it in myself. " +
     "The for_tools part at the end is only for AIs that can open my files.";
@@ -531,18 +572,50 @@
   }
 
   // Chat-facing text asks for the text only; how to store it lives in for_tools (tools: extra fields there).
+  // The app (helper) tells the page where it runs: window.JOBOMATIC_INFO. The view-only file has none.
+  function connInfo() { return window.JOBOMATIC_INFO && window.JOBOMATIC_INFO.db_path ? window.JOBOMATIC_INFO : null; }
+
+  // Where things are, for the AI: the app's own answer when there is one, else worked out from the file:// address (zip).
+  function whereIsIt() {
+    var info = connInfo(), f = dataFolder(), demo = !!window.JOBOMATIC_DEMO;
+    if (demo) return { kind: "demo" };
+    if (info && info.install_type !== "zip") return { kind: info.install_type, info: info };
+    var folder = info ? info.data_folder : f ? f.path + (f.win ? "\\" : "/") + "my_data" : null;
+    var win = info ? /^([A-Za-z]:|\\\\)/.test(folder) : !!(f && f.win);
+    var root = info ? folder.replace(/[\\\/][^\\\/]*$/, "") : f ? f.path : null;
+    return { kind: "zip", info: info, win: win, root: root, folder: folder };
+  }
+
+  // Last part of every prompt: lets the AI prove it is talking to this person's database before it reads or saves.
+  function connectionBlock(w) {
+    var info = w.info, mcp = info && info.mcp;
+    var lines = ["Check your connection"];
+    if (w.kind === "demo") {
+      lines.push("- This is the Job-o-Matic DEMO (a made-up person): there is no database on my computer to check.");
+    } else {
+      lines.push("- Data folder: " + (info ? info.data_folder : w.folder || "the my_data folder inside my Job-o-Matic folder"));
+      lines.push("- Database file: " + (info ? info.db_path : w.folder ? w.folder + (w.win ? "\\" : "/") + "jobomatic.db" : "my_data/jobomatic.db"));
+      lines.push("- MCP server: " + (mcp ? mcp.name + ", started with: " + mcp.display + " (Job-o-Matic v" + info.version + ")"
+        : "job-o-matic (see the footer of my Job-o-Matic app for its start command)"));
+    }
+    lines.push("Before reading or saving, confirm your Job-o-Matic MCP server reports this database path; if it doesn't, stop and tell me.");
+    return lines.join("\n");
+  }
+
   function buildPrompt(intro, fields, middle, tools) {
-    var f = dataFolder();
-    var win = 'python\\python.exe app\\src\\db.py "SQL"', nix = 'python/bin/python3 app/src/db.py "SQL"';
-    var demo = !!window.JOBOMATIC_DEMO;
-    var cmd = f && !demo ? (f.win ? win : nix) : "Windows " + win + "; macOS/Linux " + nix;
-    var forTools = yamlBlock((tools || []).concat([
-      ["root", demo ? "(demo: no database — example only)" : f ? f.path : "(your Job-o-Matic folder)",
-        demo ? "from the Job-o-Matic DEMO page (a made-up person)" : "paths below are relative to root"],
-      ["db", "my_data/jobomatic.db"],
-      ["originals", "my_data/originals/"],
-      ["guide", "app/docs/AI_GUIDE.md", "read first"],
-      ["access", "MCP job-o-matic (call schema_guide first), else from root: " + cmd],
+    var w = whereIsIt(), sep = w.win ? "\\" : "/", demo = w.kind === "demo";
+    var rel = w.kind === "zip" || demo;  // zip: paths are relative to the Job-o-Matic folder
+    var zipCmd = 'python\\python.exe app\\src\\db.py "SQL"', nixCmd = 'python/bin/python3 app/src/db.py "SQL"';
+    var cmd = w.kind === "zip" ? (w.root ? (w.win ? zipCmd : nixCmd) : "Windows " + zipCmd + "; macOS/Linux " + nixCmd)
+      : w.kind === "pip" ? 'job-o-matic-db --db "' + w.info.db_path + '" "SQL"'
+      : w.kind === "repo" ? 'python3 src/db.py "SQL"' : "";
+    var where = demo ? [["root", "(demo: no database — example only)", "from the Job-o-Matic DEMO page (a made-up person)"]]
+      : rel ? [["root", w.root || "(your Job-o-Matic folder)", "paths below are relative to root"],
+        ["db", "my_data/jobomatic.db"], ["originals", "my_data/originals/"], ["guide", "app/docs/AI_GUIDE.md", "read first"]]
+      : [["data_folder", w.info.data_folder], ["db", w.info.db_path], ["originals", w.info.data_folder + sep + "originals" + sep],
+        ["guide", "the schema_guide tool of the MCP server", "read first"]];
+    var forTools = yamlBlock((tools || []).concat(where, [
+      ["access", "MCP job-o-matic (call schema_guide first)" + (cmd ? ", else: " + cmd : "")],
       ["updated_by", "ai", "on every write"],
       ["expected_updated_at", "argument of the MCP save tool (the row's current updated_at), not a database column"],
       ["rules", "never delete (retire via status); never invent facts or numbers; new facts go to items before lines"]
@@ -550,7 +623,7 @@
     var body = yamlBlock(fields.concat([["outcome", "the final text, after I approve it"]]))
       .concat(["for_tools:   # only if you can open my files; chat-only AIs skip this"], forTools.map(function (l) { return "  " + l; }));
     return NEVER_INVENT + "\n" + intro.concat(CHAT_ONLY).join(" ").replace(/ \n/g, "\n") + (middle || "") +
-      "\n\n```yaml\n" + body.join("\n") + "\n```";
+      "\n\n```yaml\n" + body.join("\n") + "\n```\n\n" + connectionBlock(w);
   }
   // First line of every prompt: chat AIs read the top; the rules in for_tools come too late for them.
   var NEVER_INVENT = "Use only the facts below; never invent anything.";
@@ -704,23 +777,27 @@
   }
 
   var dlg = null;
+  // Clipboard with a fallback: ok() when copied; fail() when the browser won't (the caller shows how to copy by hand).
+  function copyText(value, ok, fail) {
+    if (!navigator.clipboard || !navigator.clipboard.writeText) { fail(); return; }
+    navigator.clipboard.writeText(value).then(ok, fail);
+  }
+
   function promptDialog() {
     if (dlg) return dlg;
     var title = h("h2", { id: "ai-dialog-title" });
     var text = h("textarea", { class: "ai-text", readOnly: true, rows: 12, "aria-label": "Prompt text", spellcheck: "false" });
     var msg = h("span", { class: "ai-msg", "aria-live": "polite" });
     var copy = h("button", { type: "button", class: "btn", onclick: function () {
-      var fallback = function () {
+      copyText(text.value, function () {
+        msg.className = "ai-msg ok-msg";
+        msg.textContent = "Copied";
+      }, function () {
         text.focus();
         text.select();
         msg.className = "ai-msg";
         msg.textContent = "Press Ctrl+C (Cmd+C on Mac) to copy";
-      };
-      if (!navigator.clipboard || !navigator.clipboard.writeText) { fallback(); return; }
-      navigator.clipboard.writeText(text.value).then(function () {
-        msg.className = "ai-msg ok-msg";
-        msg.textContent = "Copied";
-      }, fallback);
+      });
     } }, "Copy prompt");
     var el = makeDialog("", "ai-dialog-title", [
       title, h("p", { class: "small muted" }, "Paste this into any AI chat. It says where your data is and how to change it safely."),
@@ -1231,7 +1308,7 @@
     if (conflict && conflict.latest) row = conflict.latest;
     var start = row || state.newDefaults || {};
     var draft = drafts[key] = { base: {}, typed: drafts[key] ? drafts[key].typed : {} };
-    var inputs = {};
+    var inputs = {}, wraps = {};
     var uid = "f-" + table + "-" + (row ? row.id : "new");
     var els = fields.map(function (f) {
       var col = f[0], kind = f[2] || "text", id = uid + "-" + col, options = null;
@@ -1241,6 +1318,7 @@
         options = c[0];
         val = c[1];
       }
+      if (col === "phone") val = fmtPhone(val);  // shown in the chosen style; the server keeps E.164
       draft.base[col] = val;
       var saved = val;
       if (col in draft.typed) val = draft.typed[col];
@@ -1258,10 +1336,24 @@
       } else input = h("input", { id: id, name: col, type: kind === "number" ? "number" : "text", value: val,
         placeholder: kind === "date" ? "e.g. 2021 or 2021-06" : PLACEHOLDER[col] || null, required: REQUIRED[table] && REQUIRED[table][col] ? true : null });
       inputs[col] = input;
+      if (col === "phone") input.addEventListener("blur", function () {
+        var nice = fmtPhone(input.value.trim());
+        if (nice !== input.value) { input.value = nice; draft.typed[col] = nice; }
+      });
       var described = joinNonEmpty([hint && hint.id, latest && latest.id], " ");
       if (described) input.setAttribute("aria-describedby", described);
-      return h("div", { class: kind === "area" ? "field wide" : "field" }, h("label", { for: id }, f[1]), input, hint, latest);
+      var wrap = h("div", { class: kind === "area" ? "field wide" : "field" }, h("label", { for: id }, f[1]), input, hint, latest);
+      wraps[col] = wrap;
+      return wrap;
     });
+    // The note under work authorization only matters for "Other" (or an older note with no choice made yet).
+    // Hidden fields leave the Tab order; the field keeps its place in the DOM, so order never changes.
+    if (table === "people") {
+      var status = inputs.work_auth_status, note = inputs.work_authorization;
+      var showNote = function () { wraps.work_authorization.hidden = !(status.value === "Other" || (status.value === "" && note.value.trim() !== "")); };
+      status.addEventListener("change", showNote);
+      showNote();
+    }
     // Items: a visible, non-blocking note while the dates sit outside the job's. Saving still works.
     var showWarn = null;
     if (table === "items") {
@@ -1331,6 +1423,7 @@
     Object.keys(inputs).forEach(function (col) {
       var v = inputs[col].value.trim();
       var old = row && row[col] !== null && row[col] !== undefined ? String(row[col]) : "";
+      if (col === "phone") old = fmtPhone(old);  // the box shows the formatted number; unchanged means not sent
       if (row && v === old) return;
       if (!row && v === "") return;
       out[col] = v === "" ? null : (/_id$|^weight$|^sort$|^sort_order$/.test(col) ? parseInt(v, 10) : v);
@@ -1390,7 +1483,7 @@
 
   VIEWS.profile = function () {
     var people = visible(q("SELECT * FROM people ORDER BY status = 'Active' DESC, id"));
-    var out = sectionHead("Profile", "Who you are, how to reach you, what you know.");
+    var out = sectionHead("Profile", "Who you are, how to reach you, what you know. Add LinkedIn under Links.");
     if (!people.length) {
       out.push(newForm("people", "New profile") || empty("No profile yet",
         "Ask your AI to start from your resume, or add it here.", addButton("people", "Add your profile")));
@@ -1398,16 +1491,16 @@
     }
     people.forEach(function (p) {
       var img = q("SELECT mime, image FROM images WHERE person_id = ? AND status = 'Active'", [p.id])[0];
-      var facts = [["Location", p.location], ["Email", p.email], ["Phone", p.phone], ["LinkedIn", p.linkedin],
-        ["Work authorization", p.work_authorization]].filter(function (f) { return f[1]; });
+      var facts = [["Location", p.location], ["Email", p.email], ["Phone", fmtPhone(p.phone)],
+        ["Work authorization", workAuthText(p)]].filter(function (f) { return f[1]; });
       var body = h("div", { class: "profile" },
-        img && img.image && img.image.length ? h("img", { class: "headshot", alt: "Headshot of " + (p.full_name || p.name),
+        img && img.image && img.image.length ? h("img", { class: "headshot", alt: "Headshot of " + personName(p),
           src: "data:" + img.mime + ";base64," + bytesToB64(img.image) }) : null,
         h("div", null,
           p.headline ? h("p", { class: "headline" }, p.headline) : h("p", { class: "muted" }, "No headline yet."),
           p.summary ? h("p", null, p.summary) : null,
           facts.length ? h("dl", { class: "facts" }, facts.map(function (f) { return [h("dt", null, f[0]), h("dd", null, f[1])]; })) : null));
-      out.push(card("people", p, p.full_name || p.name, isRetired(p) ? p.status : null, body, []));
+      out.push(card("people", p, personName(p), isRetired(p) ? p.status : null, body, []));
     });
     var pid = people[0].id;
 
@@ -2003,11 +2096,11 @@
     var f = dataFolder(), from = window.JOBOMATIC_FOLDER;
     var sep = f && f.win ? "\\" : "/";
     var where = window.JOBOMATIC_DEMO ? "(demo: this made-up person has no folder on your computer)"
-      : f ? f.path + sep + "my_data" : from || "the my_data folder inside your Job-o-Matic folder";
+      : connInfo() ? connInfo().data_folder : f ? f.path + sep + "my_data" : from || "the my_data folder inside your Job-o-Matic folder";
     return h("section", { class: "card data-panel", "aria-labelledby": "data-title" },
       h("h3", { id: "data-title" }, "Your data"),
       h("p", null, "Everything lives in one folder on this computer: ", h("code", null, where)),
-      h("p", null, "It is backed up automatically each day, after your first change, to ", h("code", null, "my_data/backups"),
+      h("p", null, "It is backed up automatically each day, after your first change, to ", h("code", null, connInfo() ? "backups" : "my_data/backups"), connInfo() ? " inside it" : "",
         " (the newest 30 are kept)."),
       h("p", { class: "small muted" }, "To back up everything yourself, copy the whole my_data folder somewhere safe."),
       folderActions());
@@ -2039,6 +2132,11 @@
         onchange: function () { window.jomAi(this.checked); } }), "Show AI helpers"),
       h("p", { class: "small muted", style: "margin:6px 0 0" }, "The robot buttons that make a prompt for your AI, and “Tailor with your AI”. " +
         "Create Resume still offers both ways. Saved in this browser, like the theme.")));
+    out.push(h("section", { class: "card data-panel", "aria-labelledby": "phone-title" }, h("h3", { id: "phone-title" }, "Phone style"),
+      h("div", { class: "field" }, h("label", { for: "phone-style" }, "Show phone numbers as"),
+        h("select", { id: "phone-style", onchange: function () { phoneStyle(this.value); if (db && !state.editing) render(); } },
+          PHONE_STYLE_LABELS.map(function (o) { return h("option", { value: o[0], selected: o[0] === phoneStyle() }, o[1]); })),
+        h("p", { class: "small muted", style: "margin:6px 0 0" }, "Only changes how numbers look. Saved in this browser, like the theme."))));
     out.push(h("p", { class: "section-hint" }, "Your AI uses these two numbers to decide how much room older jobs get on a resume: " +
       "recent jobs get the most lines, the oldest group gets one line or is left off."));
     var settings = q("SELECT * FROM settings ORDER BY id");
@@ -2089,6 +2187,7 @@
       document.getElementById("main").focus();
     });
     renderMode();
+    renderConnection();
     var config = window.SQL_WASM_B64 ? { wasmBinary: b64ToBytes(window.SQL_WASM_B64) } : { locateFile: function (f) { return "vendor/" + f; } };
     initSqlJs(config).then(function (lib) {
       SQL = lib;
@@ -2116,11 +2215,13 @@
     window.JOM_TEST.draft = { html: draftHtml, words: adWords, marked: marked };
     window.JOM_TEST.forms = { choices: choices, drafts: drafts, leave: leaveForm, edit: function (key) { state.editing = key; },
       extracted: extractedOptions };
+    window.JOM_TEST.phone = { format: fmtPhone, name: personName, workAuth: workAuthText };
     window.JOM_TEST.state = state;
     window.JOM_TEST.tabs = TABS;
     window.JOM_TEST.dates = { record: recordDate, job: span, warning: dateWarning };
     window.JOM_TEST.remove = { question: removeQuestion, live: liveStatus };
     window.JOM_TEST.neverInvent = NEVER_INVENT;
+    window.JOM_TEST.footer = renderConnection;
     return;
   }
   start();

@@ -16,6 +16,9 @@ To back up everything, copy the whole `my_data` folder.
 ## The local program
 The editing screen runs a small program that only accepts connections from your own computer (`127.0.0.1`). It stops by itself after 20 minutes without use.
 
+## The update check
+At most once a day the app asks whether a newer version exists. pip, uv and pipx installs ask pypi.org. Zip installs ask api.github.com. The request is a normal web request with the User-Agent `job-o-matic/<version>`, and nothing else. To turn it off, clear **Settings → Check for updates**.
+
 ## Who changed what
 Every change is marked as made by **You** or your **AI**. The record cannot be edited or deleted. Rows are never deleted. They are retired and hidden instead. Rows your AI adds start as "Needs review" until you confirm them.
 

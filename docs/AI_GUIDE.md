@@ -61,8 +61,8 @@ Job-o-Matic/
 ## What lives where
 | Table | Holds |
 |---|---|
-| `people` | name, headline, contact details, summary |
-| `links` | LinkedIn, portfolio, website |
+| `people` | first_name, last_name (both required for a new person; they set full_name), headline, contact details (phone is stored as +15551234567, any format accepted), work_auth_status (Authorized / Needs sponsorship / Other) and work_auth_country, summary |
+| `links` | LinkedIn (kind `LinkedIn`; there is no LinkedIn column on people), portfolio, website |
 | `employers` | who the person worked for: name, location |
 | `positions` (view `experience`) | titles at an employer, with dates; a promotion is a second position under the same employer |
 | `items` | one fact each: `kind` (Responsibility, Achievement, Award, Project, Review, Publication, Volunteer ...), title, detail, outputs; tied to a position (`position_id`, optional) and optionally nested under another item (`parent_item_id`) |

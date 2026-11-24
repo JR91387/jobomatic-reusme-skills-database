@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
 """Local helper server for edit mode: python3 src/jobomatic/helper.py [--db PATH] [--open]
+(or `job-o-matic`; also --add-shortcut, --remove-shortcut, --no-shortcut)
 
 Listens on 127.0.0.1 only. Every request needs a local Host header; every POST also needs a
 local Origin and the per-start token (injected into the page, never written to disk)."""
@@ -26,12 +27,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # runs as a file path, not a package
 
-from jobomatic import paths, store, viewer
+from jobomatic import info, paths, shortcuts, store, updates, viewer
 from jobomatic.extract import sniff_type
 from jobomatic.originals import MAX_BYTES, add_original_bytes
 
 DEFAULT_DB = paths.default_db()  # zip: my_data/ beside app/; pip install: the user data folder
 WEB_DIR = paths.resource("web")
+APP_PATH = "/jobomatic/"
 PORTS = range(8765, 8770)
 IDLE_SECONDS = 20 * 60
 JSON_LIMIT = 1024 * 1024
@@ -198,15 +200,19 @@ class Handler(BaseHTTPRequestHandler):
     def _get(self):
         path = self.path.split("?", 1)[0]
         if path == "/":
-            return self._send(302, b"", "text/plain", [("Location", "/app/")])
+            return self._send(302, b"", "text/plain", [("Location", APP_PATH)])
+        if path == "/app" or path.startswith("/app/"):  # the address before v1.2.0
+            return self._send(302, b"", "text/plain", [("Location", APP_PATH + path[len("/app/"):])])
         if path == "/health":
             return self._json(200, {"ok": True})
+        if path == "/update-status":
+            return self._json(200, updates.check(self.server.data_dir))
         if path == "/data.js":
             return self._file(self.server.data_dir / "viewer_data.js", "text/javascript; charset=utf-8")
         if path.startswith("/original/"):
             return self._original(path[len("/original/"):])
-        if path.startswith("/app/"):
-            return self._app(path[len("/app/"):])
+        if path.startswith(APP_PATH):
+            return self._app(path[len(APP_PATH):])
         raise HttpError(404, "Not found")
 
     def _file(self, file, ctype):
@@ -220,7 +226,7 @@ class Handler(BaseHTTPRequestHandler):
             page = web / "page.html"
             if not page.is_file():
                 raise HttpError(503, "The viewer page (src/web/page.html) has not been built yet")
-            tag = viewer.guide_script() + f'<script>window.HELPER_TOKEN="{self.server.token}";window.JOBOMATIC_FOLDER={json.dumps(str(self.server.data_dir.resolve()))}</script>'  # the folder only reaches the page when the app serves it, never the shipped view-only file
+            tag = viewer.guide_script() + f'<script>window.HELPER_TOKEN="{self.server.token}";window.JOBOMATIC_FOLDER={json.dumps(str(self.server.data_dir.resolve()))};window.JOBOMATIC_INFO={json.dumps(info.app_info(self.server.db_path)).replace("</", "<\\/")}</script>'  # the folder only reaches the page when the app serves it, never the shipped view-only file
             html = page.read_text(encoding="utf-8").replace("</head>", tag + "</head>", 1)
             return self._send(200, html.encode(), "text/html; charset=utf-8")
         target = (web / rel).resolve()
@@ -271,7 +277,8 @@ class Handler(BaseHTTPRequestHandler):
     def _post(self):
         path = self.path.split("?", 1)[0]
         routes = {"/save": self._save, "/retire": self._retire, "/upload": self._upload, "/quit": self._quit,
-                  "/backup": self._backup, "/open-folder": self._open_folder}
+                  "/backup": self._backup, "/open-folder": self._open_folder,
+                  "/update-settings": self._update_settings, "/update": self._update}
         if path not in routes:
             raise HttpError(404, "Not found")
         body = self._body(UPLOAD_LIMIT if path == "/upload" else JSON_LIMIT)
@@ -338,19 +345,45 @@ class Handler(BaseHTTPRequestHandler):
         open_folder(self.server.data_dir.resolve())
         return {"ok": True}
 
+    def _update_settings(self, body):
+        value = body.get("check_updates")
+        if not isinstance(value, bool):
+            raise HttpError(400, "check_updates must be true or false")
+        settings = updates.save_settings(self.server.data_dir, check_updates=value)
+        return {"ok": True, "check_updates": settings["check_updates"]}
+
+    def _update(self, body):
+        return updates.run_update()
+
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--db", type=Path, default=DEFAULT_DB)
     ap.add_argument("--open", action="store_true", help="open the browser (always on for a pip install)")
+    ap.add_argument("--add-shortcut", action="store_true", help="add Job-o-Matic to the app menu, then exit")
+    ap.add_argument("--remove-shortcut", action="store_true", help="remove it from the app menu, then exit")
+    ap.add_argument("--no-shortcut", action="store_true",
+                    help=f"don't add the app-menu entry on first run (or set {shortcuts.SKIP_ENV}=1)")
     args = ap.parse_args()
+    data_dir = args.db.parent
+    if args.add_shortcut or args.remove_shortcut:
+        data_dir.mkdir(parents=True, exist_ok=True)
+        if args.add_shortcut:
+            done = shortcuts.add_shortcut(data_dir)
+            print(f"Added {shortcuts.APP_NAME} to the app menu: {done}" if done else "No app-menu entry was added.")
+        else:
+            done = shortcuts.remove_shortcut(data_dir)
+            print(f"Removed {done}" if done else "There was no app-menu entry to remove.")
+        sys.exit(0)
     if paths.ensure_db(args.db):
         print(f"Created a blank database at {args.db}", flush=True)
     if not args.db.exists():
         ap.error(f"No database at {args.db}; create it with src/db.py --init")
     viewer.build(args.db, backup=False)  # the day's backup waits for its first change
+    if not args.no_shortcut:
+        shortcuts.ensure_first_run(data_dir)
     server = HelperServer(args.db)
-    url = f"http://127.0.0.1:{server.port}/app/"
+    url = f"http://127.0.0.1:{server.port}{APP_PATH}"
     print(f"Job-O-Matic helper on {url}", flush=True)
     if args.open or paths.installed():
         webbrowser.open(url)

@@ -71,6 +71,8 @@ Parameters: `table`: str, `row`: dict, `expected_updated_at`: str | None = None
 
 Insert a row (no 'id' key) or update one (with 'id'); only editable columns are accepted. Recorded as 'ai'.
 New rows you add start as 'Needs review' unless you set a status. Returns the full saved row.
+people: a new person needs first_name and last_name (they set full_name); phone is stored as E.164
+(+15551234567; give the country code for non-US numbers); LinkedIn goes in links (kind 'LinkedIn').
 When updating, pass the row's updated_at from when you read it: if the person changed it since, nothing is
 written and the error carries the current row, so merge into that instead of overwriting their edit.
 

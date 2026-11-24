@@ -10,7 +10,7 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
-from jobomatic import helper, store, viewer
+from jobomatic import __version__, helper, store, viewer
 from tests.test_originals import make_blank_pdf
 
 
@@ -107,8 +107,8 @@ class SecurityTests(HelperCase):
         web.mkdir()
         self.server.web_dir = web
         (web / "ok.txt").write_text("fine")
-        self.assertEqual(self.request("GET", "/app/ok.txt")[0], 200)
-        for path in ("/app/../secret.txt", "/app/../../etc/passwd", "/app/%2e%2e/secret.txt"):
+        self.assertEqual(self.request("GET", "/jobomatic/ok.txt")[0], 200)
+        for path in ("/jobomatic/../secret.txt", "/jobomatic/../../etc/passwd", "/jobomatic/%2e%2e/secret.txt"):
             self.assertIn(self.request("GET", path)[0], (403, 404), path)
 
 
@@ -117,21 +117,42 @@ class RouteTests(HelperCase):
         status, _, payload = self.request("GET", "/health")
         self.assertEqual((status, json.loads(payload)), (200, {"ok": True}))
         status, resp, _ = self.request("GET", "/")
-        self.assertEqual((status, resp.getheader("Location")), (302, "/app/"))
+        self.assertEqual((status, resp.getheader("Location")), (302, "/jobomatic/"))
+
+    def test_old_addresses_redirect(self):
+        for old, new in (("/app/", "/jobomatic/"), ("/app", "/jobomatic/"), ("/app/styles.css", "/jobomatic/styles.css")):
+            status, resp, _ = self.request("GET", old)
+            self.assertEqual((status, resp.getheader("Location")), (302, new), old)
+
+    def test_page_gets_info(self):
+        web = self.data_dir / "web"
+        web.mkdir()
+        (web / "page.html").write_text("<html><head></head><body>x</body></html>")
+        self.server.web_dir = web
+        page = self.request("GET", "/jobomatic/")[2].decode()
+        raw = page.split("window.JOBOMATIC_INFO=", 1)[1].split("</script>", 1)[0]
+        info = json.loads(raw)
+        self.assertEqual(info["version"], __version__)
+        self.assertEqual(info["db_path"], str(self.server.db_path.resolve()))
+        self.assertEqual(info["data_folder"], str(self.server.data_dir.resolve()))
+        self.assertIn(info["install_type"], ("pip", "zip", "repo"))
+        self.assertEqual(info["mcp"]["name"], "job-o-matic")
+        self.assertEqual(info["mcp"]["transport"], "stdio")
+        self.assertEqual(info["mcp"]["env"], {"JOBOMATIC_DB": info["db_path"]})
 
     def test_app_503_without_page(self):
-        self.assertEqual(self.request("GET", "/app/")[0], 503)
+        self.assertEqual(self.request("GET", "/jobomatic/")[0], 503)
 
     def test_page_gets_token(self):
         web = self.data_dir / "web"
         web.mkdir()
         (web / "page.html").write_text("<html><head></head><body>x</body></html>")
         self.server.web_dir = web
-        status, _, payload = self.request("GET", "/app/")
+        status, _, payload = self.request("GET", "/jobomatic/")
         self.assertEqual(status, 200)
         page = payload.decode()
         self.assertIn(f'window.HELPER_TOKEN="{self.server.token}";window.JOBOMATIC_FOLDER=', page)
-        self.assertIn(json.dumps(str(self.server.data_dir.resolve())) + "</script></head>", page)
+        self.assertIn(json.dumps(str(self.server.data_dir.resolve())) + ";window.JOBOMATIC_INFO=", page)
         self.assertNotIn(self.server.token, "".join(p.read_text(errors="ignore") for p in self.data_dir.rglob("*.json")))
 
     def test_data_js(self):

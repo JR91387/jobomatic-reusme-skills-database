@@ -10,4 +10,4 @@ labels: bug
 
 **How to reproduce**
 
-**Version and computer** (e.g. v1.1.0, Windows 11, pip install or zip)
+**Version and computer** (e.g. v1.2.0, Windows 11, pip install or zip)

@@ -14,7 +14,7 @@ Returns the whole resume for one version. SQL equivalent: `SELECT resume FROM re
 
 Shape:
 - `track`
-- `person`: `name`, `full_name`, `headline`, `location`, `email`, `phone`, `linkedin`, `summary`, `work_authorization`
+- `person`: `name`, `full_name`, `first_name`, `last_name`, `headline`, `location`, `email`, `phone`, `work_auth_status`, `work_auth_country`, `work_authorization`, `summary` (LinkedIn is in `links`)
 - `links`: Active links (`kind`, `label`, `url`)
 - `employers[]`: each with `positions[]`; each position has `title`, `department`, `start_date`, `end_date`, and:
   - `lines[]`: ranked resume lines (`wording`, `length`, `angle`, `status`) with the `item` behind each (`kind`, `title`, `detail`, `metrics[]`)

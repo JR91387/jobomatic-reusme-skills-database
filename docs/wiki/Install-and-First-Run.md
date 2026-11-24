@@ -6,7 +6,22 @@ Job-o-Matic is free (MIT). It runs on your computer. Python comes inside the dow
 
 ![Profile screen](https://raw.githubusercontent.com/JR91387/jobomatic-reusme-skills-database/main/docs/screenshots/profile.png)
 
-## 1. Download
+## Quickest: one line
+**Windows** (PowerShell):
+
+```
+irm https://raw.githubusercontent.com/JR91387/jobomatic-reusme-skills-database/main/install.ps1 | iex
+```
+
+**Mac / Linux:**
+
+```
+curl -LsSf https://raw.githubusercontent.com/JR91387/jobomatic-reusme-skills-database/main/install.sh | sh
+```
+
+This installs Job-o-Matic and opens it in your browser. It needs Python 3.12 or newer (or [uv](https://docs.astral.sh/uv/)). On first run it adds itself to your Start Menu or app menu. To undo that, run `job-o-matic --remove-shortcut`. Manual options: `pip install job-o-matic`, then `job-o-matic`; or `uvx job-o-matic-mcp` for just the MCP server. Or use the zip below.
+
+## 1. Download (zip)
 Open the newest release on the project's Releases page and pick the file for your computer:
 
 | Computer | File |
@@ -28,7 +43,9 @@ Unzip anywhere, for example in Documents. The app is free and not paid-for "sign
 **Linux.** In a terminal run `chmod +x job-o-matic.sh` once, then `./job-o-matic.sh`.
 
 ## 3. The local address
-A browser tab opens at `http://127.0.0.1:8765/app/`. If 8765 is busy, the next free number is shown in the window that stays open. `127.0.0.1` is your own computer. Nothing goes on the internet. The program stops by itself after 20 minutes without use.
+A browser tab opens at `http://127.0.0.1:8765/jobomatic/`. If 8765 is busy, the next free number is shown in the window that stays open. `127.0.0.1` is your own computer. Nothing goes on the internet. The program stops by itself after 20 minutes without use.
+
+Once a day the app checks whether a newer version exists and shows a notice with an **Update now** button (pip installs) or a download link (zips). To turn the check off, clear **Settings → Check for updates**. See [[Your-Data-and-Privacy]].
 
 ## 4. Just look around
 Double-click `Job-o-Matic (view only).html`. It needs no program running.

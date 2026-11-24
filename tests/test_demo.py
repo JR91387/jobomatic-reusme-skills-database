@@ -24,7 +24,7 @@ class DemoTest(unittest.TestCase):
 
     def test_counts(self):
         expected = {
-            "people": 1, "links": 2, "employers": 3, "positions": 4, "items": 17, "item_metrics": 17,
+            "people": 1, "links": 3, "employers": 3, "positions": 4, "items": 17, "item_metrics": 17,
             "bullet_variants": 20, "tracks": 2, "skills": 7, "education": 2, "qa": 11, "originals": 2,
         }
         for table, n in expected.items():

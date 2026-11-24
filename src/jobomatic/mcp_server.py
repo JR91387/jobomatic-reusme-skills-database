@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # runs as a fil
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
-from jobomatic import originals, paths, resume, store, viewer
+from jobomatic import __version__, originals, paths, resume, store, viewer
 
 DEFAULT_DB = paths.default_db()  # zip: my_data/ beside app/; pip install: the user data folder
 DB_PATH = Path(sys.argv[1] if len(sys.argv) > 1 else os.environ.get("JOBOMATIC_DB") or DEFAULT_DB)
@@ -24,6 +24,7 @@ ORIGINAL_COLS = "id, kind, path, title, doc_date, weight, position_id, extracted
 
 server = MCPServer(
     name="job-o-matic",
+    version=__version__,
     instructions=(
         "Job-O-Matic is the user's career repository: facts about them, kept in one SQLite file.\n"
         "Read from it to write resumes, cover letters and interview answers; save new facts back as you learn them.\n"
@@ -170,6 +171,8 @@ def get(table: str, id: int) -> dict:
 def save(table: str, row: dict, expected_updated_at: str | None = None) -> dict:
     """Insert a row (no 'id' key) or update one (with 'id'); only editable columns are accepted. Recorded as 'ai'.
     New rows you add start as 'Needs review' unless you set a status. Returns the full saved row.
+    people: a new person needs first_name and last_name (they set full_name); phone is stored as E.164
+    (+15551234567; give the country code for non-US numbers); LinkedIn goes in links (kind 'LinkedIn').
     When updating, pass the row's updated_at from when you read it: if the person changed it since, nothing is
     written and the error carries the current row, so merge into that instead of overwriting their edit."""
     conn = _conn()

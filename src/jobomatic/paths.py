@@ -16,6 +16,7 @@ _REPO = {
     "web": PKG.parent / "web",
     "templates": PKG.parents[1] / "templates",
     "AI_GUIDE.md": PKG.parents[1] / "docs" / "AI_GUIDE.md",
+    "assets": PKG.parents[1] / "assets",  # app icons (zip: app/assets)
 }
 DB_NAME = "jobomatic.db"
 HTML_NAME = "Job-o-Matic (view only).html"
@@ -26,7 +27,7 @@ def installed():
 
 
 def resource(name):
-    """One of: db, web, templates, AI_GUIDE.md."""
+    """One of: db, web, templates, AI_GUIDE.md, assets."""
     return DATA / name if installed() else _REPO[name]
 
 
