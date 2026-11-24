@@ -8,6 +8,8 @@ Load your work history once. From then on your AI keeps it up to date and pulls 
 
 **Runs on your computer · No account · Works with any MCP app or chat AI · Windows, Mac, Linux**
 
+[![job-o-matic-mcp MCP server – quality and maintenance score on Glama](https://glama.ai/mcp/servers/JR91387/jobomatic-reusme-skills-database/badges/score.svg)](https://glama.ai/mcp/servers/JR91387/jobomatic-reusme-skills-database)
+
 | You | Your AI | Your AI |
 |---|---|---|
 | **Seed it once.** Drop in old resumes, reviews and job posts, or type the basics. Your files are kept unedited. | **Keeps it current.** Turns your files into facts, writes resume lines and saves new facts as it learns them. | **Writes from it.** Tailored resumes in five styles, cover letters and interview answers, from facts you've checked. |
