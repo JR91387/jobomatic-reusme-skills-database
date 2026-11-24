@@ -19,7 +19,7 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 PBS_TAG = "20261026"
 PBS_PYTHON = "3.13.18"
 PBS_URL = (
@@ -39,6 +39,7 @@ APP_PATHS = [
     "docs/assets",
     "assets",
     "scripts/connect_claude_desktop.py",
+    "pyproject.toml",  # the zip has no package metadata: __version__ reads the version from here
     "LICENSE",
     "NOTICE.md",
     "PRIVACY.md",
@@ -55,36 +56,15 @@ DIST = ROOT / "dist"
 NOTES = ROOT.parent / "05_versions" / f"v{VERSION}"
 
 RUN = "exec ./python/bin/python3 app/src/jobomatic/helper.py --open\n"
-# Windows: on first run, make a Job-o-Matic.lnk beside the .bat with the app icon (one PowerShell call, no admin).
-# goto instead of an if-block: a folder path holding ")" would end the block early.
-WIN_SHORTCUT = (
-    "if exist \"Job-o-Matic.lnk\" goto run\r\n"
-    "powershell -NoProfile -ExecutionPolicy Bypass -Command \""
-    "$s=(New-Object -ComObject WScript.Shell).CreateShortcut('%~dp0Job-o-Matic.lnk');"
-    "$s.TargetPath='%~dp0python\\pythonw.exe';$s.Arguments='app\\src\\jobomatic\\helper.py --open';"
-    "$s.WorkingDirectory='%~dp0';$s.IconLocation='%~dp0app\\assets\\icon.ico,0';$s.Save()\" >nul 2>&1"
-    " || echo Note: could not create the Job-o-Matic shortcut. This file still opens the app.\r\n"
-    ":run\r\n"
-)
-# Linux: point the .desktop Icon= at this folder (a zip can't hold an absolute path); redone if the folder moves.
-LINUX_ICON = (
-    'ICON="$PWD/app/assets/icon-256.png"\n'
-    'grep -qxF "Icon=$ICON" job-o-matic.desktop 2>/dev/null'
-    ' || sed -i "s|^Icon=.*|Icon=$ICON|" job-o-matic.desktop 2>/dev/null || true\n'
-)
+# The helper adds the app-menu entry itself on first run (Start Menu / app menu / ~/Applications,
+# see src/jobomatic/shortcuts.py), so the launchers only start it.
 LAUNCHERS = {
     "Job-o-Matic.bat": (
-        '@echo off\r\ncd /d "%~dp0"\r\n' + WIN_SHORTCUT
-        + 'start "" python\\pythonw.exe app\\src\\jobomatic\\helper.py --open\r\n'
+        '@echo off\r\ncd /d "%~dp0"\r\n'
+        'start "" python\\pythonw.exe app\\src\\jobomatic\\helper.py --open\r\n'
     ),
     "Job-o-Matic.command": '#!/bin/sh\ncd "$(dirname "$0")" || exit 1\n' + RUN,
-    "job-o-matic.sh": '#!/bin/sh\ncd "$(dirname "$(readlink -f "$0")")" || exit 1\n'
-    + LINUX_ICON
-    + RUN,
-    "job-o-matic.desktop": (
-        "[Desktop Entry]\nType=Application\nName=Job-o-Matic\nComment=Your career repository\n"
-        'Exec=sh -c \'exec "$(dirname "$1")/job-o-matic.sh"\' _ %k\nTerminal=false\nIcon=job-o-matic\nCategories=Office;\n'
-    ),
+    "job-o-matic.sh": '#!/bin/sh\ncd "$(dirname "$(readlink -f "$0")")" || exit 1\n' + RUN,
 }
 
 
@@ -342,9 +322,9 @@ Four downloads: windows-x64, macos-arm64, macos-x64, linux-x64. Each unzips to a
 - `python/`: portable CPython {PBS_PYTHON} (python-build-standalone {PBS_TAG}) with `mcp` 2.3.0 and `pypdf` 6.21.4
 - `app/`: the program (src, templates, AI guide, Claude Desktop connector, licence files)
 - `my_data/jobomatic.db`: a blank database, and empty `originals/` folders
-- a launcher (`Job-o-Matic.bat`, `Job-o-Matic.command`, or `job-o-matic.sh` + `.desktop`).
-  On first run the Windows `.bat` makes a `Job-o-Matic.lnk` shortcut with the app icon beside itself;
-  `job-o-matic.sh` points the `.desktop` file's icon at `app/assets/icon-256.png`
+- a launcher (`Job-o-Matic.bat`, `Job-o-Matic.command`, or `job-o-matic.sh`).
+  On first run the app adds itself to the Start Menu (Windows), the app menu (Linux) or
+  `~/Applications` (macOS), with its icon; `--remove-shortcut` takes it out again
 - `{VIEW_NAME}` (open by double-click, no program needed)
 
 The demo seed (`app/src/db/seed_demo.sql`) ships but is not loaded by default.

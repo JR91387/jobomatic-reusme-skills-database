@@ -432,7 +432,7 @@ class TestRules(DbCase):
         rows = self.conn.execute("SELECT profile FROM profile_json").fetchall()
         self.assertEqual(len(rows), 1)
         doc = json.loads(rows[0][0])
-        self.assertEqual(set(doc), {"person", "employers", "positions", "items", "skills", "education"})
+        self.assertEqual(set(doc), {"person", "links", "employers", "positions", "items", "skills", "education"})
         self.assertEqual(doc["person"]["name"], "Pat")
         self.assertEqual([(e["name"], e["status"]) for e in doc["employers"]], [("A", "Needs review")])
         self.assertEqual([(p["employer"], p["title"], p["status"]) for p in doc["positions"]], [("A", "t", "Needs review")])

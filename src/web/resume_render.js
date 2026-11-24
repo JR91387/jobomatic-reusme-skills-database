@@ -14,8 +14,34 @@
     return m ? MONTHS[parseInt(m[2], 10) - 1] + " " + m[1] : v;
   }
 
+  // Phone for display. The server keeps E.164 (+15551234567); this only changes how it looks. Mirrored in
+  // src/jobomatic/resume.py (_phone). style: paren | dash | dot | intl (the page's Phone style setting).
+  var PHONE_STYLES = ["paren", "dash", "dot", "intl"];
+  var CC2 = /^(20|27|3[0-46-9]|4[013-9]|5[1-8]|6[0-6]|8[1246]|9[0-58])/;
+  function formatPhone(value, style) {
+    var raw = value === null || value === undefined ? "" : String(value).trim();
+    var digits = raw.replace(/\D/g, "");
+    var plus = raw.charAt(0) === "+";
+    if (!plus && digits.length === 11 && digits.charAt(0) === "1") digits = digits.slice(1);
+    if (!plus && digits.length === 10) { plus = true; digits = "1" + digits; }
+    if (!plus || digits.length < 8 || digits.length > 15) return raw;
+    var m = /^1(\d{3})(\d{3})(\d{4})$/.exec(digits);
+    if (m) {
+      if (style === "dash") return m[1] + "-" + m[2] + "-" + m[3];
+      if (style === "dot") return m[1] + "." + m[2] + "." + m[3];
+      if (style === "intl") return "+1 " + m[1] + " " + m[2] + " " + m[3];
+      return "(" + m[1] + ") " + m[2] + "-" + m[3];
+    }
+    var cc = /^[17]/.test(digits) ? 1 : CC2.test(digits) ? 2 : 3;
+    var national = digits.slice(cc), groups = [];
+    while (national.length > 4) { groups.unshift(national.slice(-4)); national = national.slice(0, -4); }
+    groups.unshift(national);
+    return "+" + digits.slice(0, cc) + " " + groups.join(" ");
+  }
+
   function contact(person, links) {
-    var html = [person.location, person.phone, person.email].filter(Boolean).map(function (p) { return "<span>" + e(p) + "</span>"; });
+    var phone = formatPhone(person.phone, typeof root.jomPhoneStyle === "function" ? root.jomPhoneStyle() : "paren");
+    var html = [person.location, phone, person.email].filter(Boolean).map(function (p) { return "<span>" + e(p) + "</span>"; });
     links.forEach(function (l) { html.push("<span><a href=\"" + e(l.url) + "\">" + e(l.label || l.url) + "</a></span>"); });
     return html.join("\n");
   }
@@ -95,4 +121,6 @@
 
   root.JOM = root.JOM || {};
   root.JOM.renderResume = renderResume;
+  root.JOM.formatPhone = formatPhone;
+  root.JOM.PHONE_STYLES = PHONE_STYLES;
 })(typeof window !== "undefined" ? window : globalThis);

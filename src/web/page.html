@@ -35,6 +35,19 @@
     return on;
   }
   jomAi();
+  // "Phone style" (Settings), kept like the theme: paren | dash | dot | intl. Only changes how numbers look on screen.
+  var jomPhoneNow = "paren";
+  function jomPhoneStyle(choice) {
+    if (choice) jomPhoneNow = choice;
+    try {
+      if (choice) localStorage.setItem("jobomatic.phone", choice);
+      else jomPhoneNow = localStorage.getItem("jobomatic.phone") || jomPhoneNow;
+    } catch (e) {
+      console.warn("Job-o-Matic: browser storage is blocked, so the phone style lasts until the page closes.", e);
+    }
+    if (["paren", "dash", "dot", "intl"].indexOf(jomPhoneNow) < 0) jomPhoneNow = "paren";
+    return jomPhoneNow;
+  }
 </script>
 <link rel="icon" href="favicon.svg">
 <link rel="stylesheet" href="tokens.css">
@@ -58,6 +71,7 @@
   </div>
 </nav>
 <div id="errors" class="errors" role="alert" aria-live="assertive"></div>
+<div id="update-bar" class="update-bar" aria-label="Update notice" hidden></div>
 <main id="main" class="main" tabindex="-1">
   <p class="loading">Loading your career file…</p>
 </main>
@@ -71,10 +85,13 @@
     <label><input type="radio" name="theme" value="dark"><span>Dark</span></label>
   </div>
   <label class="toggle"><input type="checkbox" id="show-retired"> Show removed</label>
+  <span id="check-updates-box" hidden><label class="toggle"><input type="checkbox" id="check-updates"> Check for updates</label></span>
+  <div id="conn" class="conn"></div>
 </footer>
 <div id="status" class="sr-only" role="status"></div>
 <script src="vendor/sql-wasm.js"></script>
 <script src="resume_render.js"></script>
 <script src="app.js"></script>
+<script src="updates.js"></script>
 </body>
 </html>

@@ -1,12 +1,15 @@
 # SPDX-License-Identifier: MIT
 # Built by Jerry Reinitz, Reinitz Industries. Tulsa software development: bespoke, effective applications. https://jerryreinitz.com
 import json
+import os
 import re
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import NamedTuple
+
+import phonenumbers
 
 from jobomatic import paths
 
@@ -40,26 +43,41 @@ def _open(path):
 
 
 def connect(path):
+    """Opens the database. A file from an older supported version (4 and up) is backed up to
+    <data_dir>/backups/ and upgraded first; older files are refused."""
     if not Path(path).exists():
         raise FileNotFoundError(f"No database at {path}; create it with --init")
     conn = _open(path)
     try:
-        _check_version(conn)
+        version = conn.execute("PRAGMA user_version").fetchone()[0]
+        _check_version(version)
+        if version >= SCHEMA_VERSION:
+            return conn
+        conn.close()
+        upgrade(path, version)
+        conn = _open(path)
+        _check_version(conn.execute("PRAGMA user_version").fetchone()[0])
     except Exception:
         conn.close()
         raise
     return conn
 
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
+OLDEST_UPGRADABLE = 4
 
 
-def _check_version(conn):
+def _check_version(version):
     """Refuses a database made by an older test version; there is no upgrade path before version 4."""
-    version = conn.execute("PRAGMA user_version").fetchone()[0]
-    if version < SCHEMA_VERSION:
+    if version < OLDEST_UPGRADABLE:
         raise RuntimeError(f"This file was made by an older test version of Job-o-Matic (schema {version}); "
                            f"it is not supported. Create a new file.")
+
+
+def _build_schema(conn, seed=True):
+    names = ("schema.sql", "schema_guide.sql", "seed_blank.sql") if seed else ("schema.sql", "schema_guide.sql")
+    for name in names:
+        conn.executescript((SQL_DIR / name).read_text(encoding="utf-8"))
 
 
 def new_database(path):
@@ -69,14 +87,215 @@ def new_database(path):
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = _open(path)
     try:
-        for name in ("schema.sql", "schema_guide.sql", "seed_blank.sql"):
-            conn.executescript((SQL_DIR / name).read_text(encoding="utf-8"))
+        _build_schema(conn)
     except Exception:
         conn.close()
         for suffix in ("", "-wal", "-shm"):
             Path(str(path) + suffix).unlink(missing_ok=True)
         raise
     conn.close()
+
+
+# ---- Upgrades ---------------------------------------------------------------------------------------------
+# One step per version: UPGRADES[n] turns a version-n file into version n+1 in place. A new version adds a step.
+
+def upgrade(path, version):
+    """Backs the file up, then runs every step from `version` to SCHEMA_VERSION. Returns the backup path."""
+    path = Path(path)
+    if version < OLDEST_UPGRADABLE or version >= SCHEMA_VERSION:
+        raise RuntimeError(f"Cannot upgrade schema {version} to {SCHEMA_VERSION}")
+    _take_sole_access(path)
+    stamp = datetime.now(timezone.utc).astimezone().strftime("%Y%m%d-%H%M%S")
+    backup = path.parent / "backups" / f"jobomatic_v{version}_{stamp}.db"
+    try:
+        backup.parent.mkdir(parents=True, exist_ok=True)
+        checked_copy(path, backup)
+    except Exception as exc:
+        raise RuntimeError(f"This file needs an upgrade to version {SCHEMA_VERSION}, but the backup copy failed "
+                           f"({exc}); nothing was changed. Free some disk space or check the folder "
+                           f"{backup.parent} can be written, then open it again.") from exc
+    while version < SCHEMA_VERSION:
+        try:
+            UPGRADES[version](path)
+        except Exception as exc:
+            raise RuntimeError(f"Upgrading from version {version} failed ({exc}). The file was not changed; "
+                               f"a copy from before the upgrade is at {backup}.") from exc
+        version += 1
+    return backup
+
+
+def _take_sole_access(path):
+    """Leaves WAL mode, which folds the -wal file in and only works when no other program has the file open."""
+    conn = sqlite3.connect(path, isolation_level=None)
+    try:
+        conn.execute("PRAGMA busy_timeout=5000")
+        mode = conn.execute("PRAGMA journal_mode=DELETE").fetchone()[0]
+    except sqlite3.OperationalError:  # locked: someone else is reading or writing it
+        mode = "busy"
+    finally:
+        conn.close()
+    if mode.lower() != "delete":
+        raise RuntimeError("This file needs an upgrade, but another program has it open. Close the other "
+                           "Job-o-Matic windows and your AI app, then open it again.")
+
+
+def _rebuild(path, fill=None, after_copy=None):
+    """Rebuild step: build a fresh file from the current schema (no seed rows; schema_guide comes from the new
+    schema), copy every row across with its rowid (columns matched by name; `fill(table, cols, rows)` may
+    rewrite a table's columns and rows), check the row counts per table, run `after_copy(conn)` on the new file
+    with the triggers back on, then swap the files. Triggers are off while copying, so audit history and
+    updated_at are copied exactly and the copy itself adds no audit rows."""
+    path = Path(path)
+    tmp = path.with_name(path.name + ".upgrade")
+    for suffix in ("", "-journal", "-wal", "-shm"):
+        Path(str(tmp) + suffix).unlink(missing_ok=True)
+    try:
+        new = sqlite3.connect(tmp, isolation_level=None)
+        try:
+            _build_schema(new, seed=False)
+            triggers = new.execute("SELECT name, sql FROM sqlite_master WHERE type = 'trigger' ORDER BY rowid").fetchall()
+            for name, _ in triggers:
+                new.execute(f'DROP TRIGGER "{name}"')
+            new_tables = [r[0] for r in new.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' "
+                "AND name NOT LIKE 'search_index_%' AND name <> 'schema_guide' ORDER BY rowid")]
+            new_cols = {t: [r[1] for r in new.execute(f'PRAGMA table_info("{t}")')] for t in new_tables}
+        finally:
+            new.close()
+        old = sqlite3.connect(path, isolation_level=None)
+        try:
+            old.execute("PRAGMA busy_timeout=5000")
+            old.execute("ATTACH DATABASE ? AS new", (str(tmp),))
+            old.execute("BEGIN EXCLUSIVE")
+            old_tables = {r[0] for r in old.execute(
+                "SELECT name FROM main.sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' "
+                "AND name NOT LIKE 'search_index_%' AND name <> 'schema_guide'")}
+            lost = old_tables - set(new_tables)
+            if lost:
+                raise RuntimeError(f"tables missing from the new schema: {sorted(lost)}")
+            for table in new_tables:
+                if table not in old_tables:
+                    continue
+                cols = [r[1] for r in old.execute(f'PRAGMA main.table_info("{table}")')]
+                cols = ([] if "id" in cols else ["rowid"]) + cols  # id is the rowid where there is one
+                rows = old.execute(f'SELECT {", ".join(_quote(c) for c in cols)} FROM main."{table}"').fetchall()
+                out_cols, rows = fill(table, cols, rows) if fill else (cols, rows)
+                missing = set(out_cols) - set(new_cols[table]) - {"rowid"}
+                if missing:
+                    raise RuntimeError(f"{table} columns missing from the new schema: {sorted(missing)}")
+                quoted = ", ".join(_quote(c) for c in out_cols)
+                old.executemany(f'INSERT INTO new."{table}" ({quoted}) VALUES ({", ".join("?" * len(out_cols))})', rows)
+                before = old.execute(f'SELECT count(*) FROM main."{table}"').fetchone()[0]
+                after = old.execute(f'SELECT count(*) FROM new."{table}"').fetchone()[0]
+                if before != after:
+                    raise RuntimeError(f"{table}: {before} rows before, {after} after")
+            old.execute("COMMIT")
+            old.execute("DETACH DATABASE new")
+        except BaseException:
+            if old.in_transaction:
+                old.execute("ROLLBACK")
+            raise
+        finally:
+            old.close()
+        new = sqlite3.connect(tmp, isolation_level=None)
+        try:
+            new.executescript("BEGIN;\n" + ";\n".join(sql for _, sql in triggers) + ";\nCOMMIT;")
+            bad = new.execute("PRAGMA foreign_key_check").fetchall()
+            if bad:
+                raise RuntimeError(f"broken references after copying: {bad[:5]}")
+            check = new.execute("PRAGMA integrity_check").fetchone()[0]
+            if check != "ok":
+                raise RuntimeError(f"integrity check: {check}")
+            if after_copy:
+                after_copy(new)
+        finally:
+            new.close()
+        os.replace(tmp, path)
+    except BaseException:
+        for suffix in ("", "-journal", "-wal", "-shm"):
+            Path(str(tmp) + suffix).unlink(missing_ok=True)
+        raise
+    for suffix in ("-journal", "-wal", "-shm"):  # stale companions of the old file must not touch the new one
+        Path(str(path) + suffix).unlink(missing_ok=True)
+
+
+def _quote(col):
+    return col if col == "rowid" else f'"{col}"'
+
+
+def split_name(text):
+    """'Jane Q Public' -> ('Jane Q', 'Public'): split on the last space. One word -> (word, '')."""
+    parts = (text or "").strip().rsplit(None, 1)
+    if not parts:
+        return "", ""
+    return (parts[0], parts[1]) if len(parts) == 2 else (parts[0], "")
+
+
+US_NAMES = {"us", "u.s", "usa", "u.s.a", "united states", "united states of america"}
+NO_SPONSOR = re.compile(r"\b(without|no|not\s+requir\w*|not\s+need\w*|never\s+need\w*|do(?:es)?\s*n[o']?t\s+(?:need|require))"
+                        r"\b[\w\s]{0,20}?sponsor", re.IGNORECASE)
+COUNTRY = re.compile(r"\bin\s+(?:the\s+)?([A-Z][\w.]*(?:\s+(?:of\s+)?[A-Z][\w.]*)*)")
+
+
+def work_auth_fields(text):
+    """Old free-text work authorization -> (work_auth_status, work_auth_country). 'Authorized ... without
+    sponsorship' counts as Authorized; any other mention of sponsorship as Needs sponsorship."""
+    text = (text or "").strip()
+    if not text:
+        return None, None
+    authorized = re.search(r"authori[sz]ed", text, re.IGNORECASE)
+    if authorized and (NO_SPONSOR.search(text) or not re.search(r"sponsor|\bnot\b", text, re.IGNORECASE)):
+        m = COUNTRY.search(text)
+        country = m.group(1).rstrip(".") if m else None
+        if country and country.lower().rstrip(".") in US_NAMES:
+            country = "United States"
+        return "Authorized", country
+    if re.search(r"sponsor", text, re.IGNORECASE):
+        return "Needs sponsorship", None
+    return "Other", None
+
+
+def _norm_url(url):
+    return (url or "").strip().rstrip("/").lower()
+
+
+def _v4_to_v5(path):
+    """people gains first_name/last_name (split from full_name, else name) and work_auth_status/country (read
+    from the old text, which is kept); people.linkedin moves to links as kind LinkedIn; phone and email are
+    normalized where they can be read."""
+    moved = []
+
+    def fill(table, cols, rows):
+        if table != "people":
+            return cols, rows
+        keep = [c for c in cols if c != "linkedin"]
+        out = []
+        for row in rows:
+            r = dict(zip(cols, row))
+            status, country = work_auth_fields(r["work_authorization"])
+            for key, normalize in (("phone", normalize_phone), ("email", normalize_email)):
+                try:
+                    r[key] = normalize(r[key])
+                except ValueError:
+                    pass  # an old value the checks cannot read is kept as typed
+            out.append([r[c] for c in keep] + [*split_name(r["full_name"] or r["name"]), status, country])
+            if (r.get("linkedin") or "").strip():
+                moved.append((r["id"], r["linkedin"].strip()))
+        return keep + ["first_name", "last_name", "work_auth_status", "work_auth_country"], out
+
+    def after_copy(conn):
+        conn.execute("BEGIN")
+        for person_id, url in moved:
+            have = {_norm_url(u) for (u,) in conn.execute("SELECT url FROM links WHERE person_id = ?", (person_id,))}
+            if _norm_url(url) not in have:
+                conn.execute("INSERT INTO links (person_id, kind, label, url, sort, updated_by)"
+                             " VALUES (?, 'LinkedIn', NULL, ?, 0, 'app')", (person_id, url))
+        conn.execute("COMMIT")
+
+    _rebuild(path, fill, after_copy)
+
+
+UPGRADES = {4: _v4_to_v5}
 
 
 def _statements(sql):
@@ -126,8 +345,8 @@ def run_sql(conn, sql):
 
 
 EDITABLE_TABLES = {
-    "people": {"name", "full_name", "other_names", "headline", "location", "phone", "email", "linkedin",
-               "summary", "work_authorization", "status"},
+    "people": {"name", "full_name", "first_name", "last_name", "other_names", "headline", "location", "phone",
+               "email", "summary", "work_authorization", "work_auth_status", "work_auth_country", "status"},
     "links": {"person_id", "kind", "label", "url", "sort", "status"},
     "images": {"caption", "status"},
     "employers": {"person_id", "name", "location", "website", "notes", "status"},
@@ -226,6 +445,9 @@ def _save(conn, table, row, actor, expected_updated_at):
         raise ValueError(f"Not editable in {table}: {bad}; editable: {sorted(EDITABLE_TABLES[table])}")
     if not row:
         raise ValueError("Nothing to save: give at least one column")
+    _normalize_contact(row)
+    if table == "people":
+        _people_names(conn, row, row_id)
     row["updated_by"] = actor
     cols = list(row)
     if row_id is None:
@@ -244,6 +466,71 @@ def _save(conn, table, row, actor, expected_updated_at):
             raise ValueError(f"No {table} row {row_id}") from None
         raise Changed(table, current) from None
     return row_id
+
+
+PHONE_HELP = "Include the country code for non-US numbers, e.g. +44 20 7946 0958."
+
+
+def normalize_phone(value, region="US"):
+    """Any common way of writing a phone number -> E.164 ('+15551234567'); empty stays empty.
+    Accepts numbers whose length fits a full number for that country (phonenumbers' is_possible, not is_valid),
+    so made-up or newly issued numbers such as 555 ones are kept; junk and too short or too long are refused."""
+    if value is None or not str(value).strip():
+        return value if value is None else ""
+    text = str(value).strip()
+    try:
+        number = phonenumbers.parse(text, region)
+    except phonenumbers.NumberParseException:
+        number = None
+    if number is None or phonenumbers.is_possible_number_with_reason(number) != phonenumbers.ValidationResult.IS_POSSIBLE:
+        raise ValueError(f"Phone number not recognized: {text!r}. {PHONE_HELP}")
+    return phonenumbers.format_number(number, phonenumbers.PhoneNumberFormat.E164)
+
+
+def normalize_email(value):
+    """Trimmed, the domain in lower case; needs one @ and a dot in the domain. Empty stays empty."""
+    if value is None or not str(value).strip():
+        return value if value is None else ""
+    text = str(value).strip()
+    local, at, domain = text.rpartition("@")
+    if (not at or not local or "@" in local or any(c.isspace() for c in text)
+            or "." not in domain.strip(".") or domain.startswith(".") or domain.endswith(".") or ".." in domain):
+        raise ValueError(f"Email address not recognized: {text!r}. Use the form name@example.com.")
+    return f"{local}@{domain.lower()}"
+
+
+def _normalize_contact(row):
+    if "phone" in row:
+        row["phone"] = normalize_phone(row["phone"])
+    if "email" in row:
+        row["email"] = normalize_email(row["email"])
+
+
+def _people_names(conn, row, row_id):
+    """first_name/last_name drive full_name, and name when name was empty or simply the old full name.
+    A new person needs both (the web and MCP forms ask for them)."""
+    for key in ("first_name", "last_name"):
+        if isinstance(row.get(key), str):
+            row[key] = row[key].strip()
+    old = {} if row_id is None else (get_row(conn, "people", row_id) or {})
+    if row_id is None and not (row.get("first_name") and row.get("last_name")):
+        raise ValueError("A new person needs first_name and last_name")
+    if "first_name" not in row and "last_name" not in row:
+        return
+    first = row.get("first_name", old.get("first_name")) or ""
+    last = row.get("last_name", old.get("last_name")) or ""
+    full = f"{first} {last}".strip()
+    if not full:
+        return
+    row["full_name"] = full
+    if not (row.get("name") or "").strip() and ("name" in row or not old.get("name")
+                                                  or old.get("name") == old.get("full_name")):
+        row["name"] = full
+    if "name" in row:
+        taken = conn.execute("SELECT 1 FROM people WHERE name = ? AND rowid IS NOT ?", (row["name"], row_id)).fetchone()
+        if taken:
+            raise ValueError(f"Another person already has the name {row['name']!r}. Set name to something "
+                             f"different (for example add a middle initial) and save again.")
 
 
 def get_row(conn, table, rowid):

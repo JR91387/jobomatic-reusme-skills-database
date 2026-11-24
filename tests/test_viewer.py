@@ -226,6 +226,23 @@ NODE_PROMPTS = NODE_HEAD + r"""
   process.stdout.write(JSON.stringify(out));
 });
 """
+# Every prompt ends with the "Check your connection" block: from JOBOMATIC_INFO when the app serves the page.
+NODE_CONN = NODE_HEAD + r"""
+  const P = T.prompts, kinds = {
+    pip: { version: "1.2.0", data_folder: "/home/u/.local/share/job-o-matic", db_path: "/home/u/.local/share/job-o-matic/jobomatic.db",
+      install_type: "pip", mcp: { name: "job-o-matic", command: "job-o-matic-mcp", args: [], display: "job-o-matic-mcp", transport: "stdio" } },
+    zip: { version: "1.2.0", data_folder: "C:\\Jobs\\Job-o-Matic\\my_data", db_path: "C:\\Jobs\\Job-o-Matic\\my_data\\jobomatic.db",
+      install_type: "zip", mcp: { name: "job-o-matic", command: "C:\\Jobs\\Job-o-Matic\\python\\python.exe", args: ["C:\\Jobs\\Job-o-Matic\\app\\src\\jobomatic\\mcp_server.py"],
+        display: "C:\\Jobs\\Job-o-Matic\\python\\python.exe C:\\Jobs\\Job-o-Matic\\app\\src\\jobomatic\\mcp_server.py", transport: "stdio" } }
+  };
+  const out = {};
+  Object.keys(kinds).concat(["none"]).forEach((k) => {
+    window.JOBOMATIC_INFO = kinds[k];
+    out[k] = { qa: P.qa(1), lines: P.lines(1), create: P.create("executive", "Original", "Forklift lead"), fill: P.fill("skills") };
+  });
+  process.stdout.write(JSON.stringify(out));
+});
+"""
 # Quick draft: only the ticked lines (skip = unticked ids) reach the resume; job-ad words are marked.
 NODE_DRAFT = NODE_HEAD + r"""
   require(path.join(web, "resume_render.js"));
@@ -279,6 +296,58 @@ NODE_DOM = 'globalThis.HELPER_TOKEN = "t";' + NODE_HEAD + r"""
   window.AI_GUIDE = "# Guide\n## Part\nSome text.";
   const all = [], walk = (n) => { if (n instanceof El) { all.push(n); n.children.forEach(walk); } };
   const text = (n) => n instanceof El ? n.children.map(text).join("") : n && n.text !== undefined ? n.text : "";
+"""
+# Footer: data folder and MCP command each get a Copy button; version shown; nothing without the app's info.
+NODE_FOOTER = NODE_DOM + r"""
+  const box = new El("div");
+  globalThis.document.getElementById = () => box;
+  const run = () => { box.children = []; T.footer(); return box; };
+  window.JOBOMATIC_INFO = undefined;
+  const none = run().children.length;
+  window.JOBOMATIC_INFO = { version: "1.2.0", data_folder: "/d", db_path: "/d/jobomatic.db", install_type: "pip",
+    mcp: { name: "job-o-matic", display: "job-o-matic-mcp" } };
+  const b = run();
+  all.length = 0;
+  walk(b);
+  process.stdout.write(JSON.stringify({ none, text: text(b), buttons: all.filter((n) => n.tagName === "BUTTON").map((n) => n.attrs["aria-label"]) }));
+});
+"""
+# The profile and skills forms (edit mode, stand-in DOM): field order = Tab order, names, work authorization, phone styles.
+NODE_PROFILE = NODE_DOM + r"""
+  require(path.join(web, "resume_render.js"));
+  const sub = (n, pred) => !(n instanceof El) ? [] : [].concat(pred(n) ? [n] : [], ...n.children.map((c) => sub(c, pred)));
+  const roots = (view) => [].concat(T.views[view]());
+  const person = roots("profile").flatMap((n) => sub(n, (x) => /^people:/.test(x.attrs["data-key"] || "")))[0].attrs["data-key"];
+  T.forms.edit(person);
+  const profile = roots("profile").flatMap((n) => sub(n, (x) => x.tagName === "FORM"))[0];
+  const controls = sub(profile, (x) => /^(INPUT|SELECT|TEXTAREA|BUTTON)$/.test(x.tagName));
+  const byName = (nm) => controls.find((x) => x.attrs.name === nm);
+  const select = (nm) => sub(byName(nm), (x) => x.tagName === "OPTION").map((o) => o.attrs.value);
+  const phones = {};
+  ["paren", "dash", "dot", "intl"].forEach((st) => { phones[st] = window.JOM.formatPhone("+15551234567", st); });
+  const wrapOf = (nm) => sub(profile, (x) => x.tagName === "DIV" && x.children.some((c) => c === byName(nm)))[0];
+  T.forms.edit("new:skills");
+  const skillsNew = roots("profile").flatMap((n) => sub(n, (x) => x.tagName === "FORM"))[0];
+  const cat = sub(skillsNew, (x) => x.tagName === "SELECT" && x.attrs.name === "category")[0];
+  process.stdout.write(JSON.stringify({
+    order: controls.map((x) => x.attrs.name || text(x)),
+    required: controls.filter((x) => x.attrs.required !== undefined).map((x) => x.attrs.name),
+    tag: { work_auth_status: byName("work_auth_status").tagName, first_name: byName("first_name").tagName },
+    status_options: select("work_auth_status"),
+    help: text(wrapOf("work_auth_status")),
+    note_label: text(wrapOf("work_authorization").children[0]),
+    note_hidden: wrapOf("work_authorization").hidden === true,
+    skill_options: sub(cat, (x) => x.tagName === "OPTION").map((o) => o.attrs.value),
+    phones,
+    other: [window.JOM.formatPhone("+442079460958", "paren"), window.JOM.formatPhone("5551234567", "dash"),
+      window.JOM.formatPhone("(555) 123-4567", "intl"), window.JOM.formatPhone("+353 1 234 5678", "dot"), window.JOM.formatPhone("n/a", "paren"),
+      window.JOM.formatPhone("", "paren")],
+    card_phone: T.phone.format("+15551234567"),
+    name: T.phone.name({ first_name: "Ada", last_name: "Lovelace", full_name: "Ada Lovelace" }),
+    work_auth: [T.phone.workAuth({ work_auth_status: "Authorized", work_auth_country: "United States" }),
+      T.phone.workAuth({ work_auth_status: "Other", work_authorization: "Student visa", work_auth_country: "Canada" })]
+  }));
+});
 """
 NODE_A11Y = NODE_DOM + r"""
   Object.keys(T.views).forEach((k) => {  // "how" is prose: its sample You/AI/App markers are words, not row markers
@@ -393,7 +462,7 @@ def viewer_js_const(name):
     return json.loads(re.search(rf'var {name} = ("[^"]*");', app)[1])
 
 
-PROFILE_KEYS = {"person", "employers", "positions", "items", "skills", "education"}
+PROFILE_KEYS = {"person", "links", "employers", "positions", "items", "skills", "education"}
 
 
 @unittest.skipUnless(shutil.which("node"), "node is not installed: the prompt checks run app.js in node")
@@ -514,6 +583,32 @@ class PromptCase(unittest.TestCase):
         self.assertTrue(out["warn"][0] and out["warn"][1] and out["warn"][2])
         self.assertEqual(out["warn"][3:], ["", "", ""])  # a bare year that may fit, no dates, or no job: no warning
 
+    def test_prompts_end_with_connection_block(self):
+        out = self.run_node(NODE_CONN)
+        for kind, prompts in out.items():
+            for name, prompt in prompts.items():
+                with self.subTest(install=kind, prompt=name):
+                    tail = prompt.split("Check your connection", 1)[1]
+                    self.assertTrue(prompt.rstrip().endswith("tell me."))
+                    self.assertIn("confirm your Job-o-Matic MCP server reports this database path; if it doesn't, stop and tell me.", tail)
+                    self.assertIn("- MCP server: job-o-matic", tail)
+                    if kind != "none":
+                        self.assertIn("- Data folder: " + {"pip": "/home/u/.local/share/job-o-matic", "zip": "C:\\Jobs\\Job-o-Matic\\my_data"}[kind], tail)
+                        self.assertIn("- Database file: ", tail)
+                        self.assertIn("(Job-o-Matic v1.2.0)", tail)
+                    if kind == "pip":
+                        self.assertNotIn("python\\python.exe", prompt)
+                        self.assertNotIn("app/docs/AI_GUIDE.md", prompt)
+                        self.assertIn("job-o-matic-mcp", tail)
+
+    def test_footer_shows_folder_command_version_and_copy_buttons(self):
+        out = self.run_node(NODE_FOOTER)
+        self.assertEqual(out["none"], 0)  # the view-only file has no info: nothing shown
+        self.assertIn("Data folder: /d", out["text"])
+        self.assertIn("job-o-matic-mcp", out["text"])
+        self.assertIn("v1.2.0", out["text"])
+        self.assertEqual(out["buttons"], ["Copy data folder", "Copy MCP start command"])
+
     def test_profile_block_in_qa_and_fill_prompts(self):
         for name in ["qa"] + [n for n in self.prompts if n.startswith("fill_")]:
             with self.subTest(prompt=name):
@@ -544,6 +639,33 @@ class PromptCase(unittest.TestCase):
             conn.close()
         self.assertEqual(texts[str(jd["id"])], (self.data_dir / (jd["path"] + ".txt")).read_text(encoding="utf-8"))
         self.assertEqual(len(texts[str(self.big_id)]), viewer.TEXT_CAP + len("\n(truncated)"))
+
+    def test_profile_form_names_work_auth_skills_and_phone(self):
+        out = self.run_node(NODE_PROFILE)
+        # Field order is Tab order: names first, Save last, nothing for LinkedIn or the old "what should we call you".
+        self.assertEqual(out["order"], ["first_name", "last_name", "headline", "location", "email", "phone", "work_auth_status",
+                                        "work_auth_country", "work_authorization", "summary", "Save", "Cancel"])
+        self.assertEqual(out["required"], ["first_name", "last_name"])
+        for gone in ("name", "full_name", "linkedin"):
+            self.assertNotIn(gone, out["order"])
+        self.assertEqual(out["tag"], {"work_auth_status": "SELECT", "first_name": "INPUT"})
+        self.assertEqual(out["status_options"], ["", "Authorized", "Needs sponsorship", "Other"])
+        self.assertIn("Can you legally work in this country without the employer sponsoring a visa?", out["help"])
+        self.assertEqual(out["note_label"], "Details")
+        self.assertTrue(out["note_hidden"])  # no status and no note: the note field stays out of the Tab order
+        self.assertEqual([o for o in out["skill_options"] if o],
+                         ["Skill", "System", "Application/Software", "Method", "Standard"])
+        self.assertEqual(out["phones"], {"paren": "(555) 123-4567", "dash": "555-123-4567", "dot": "555.123.4567",
+                                         "intl": "+1 555 123 4567"})
+        self.assertEqual(out["other"], ["+44 20 7946 0958", "555-123-4567", "+1 555 123 4567", "+353 1234 5678", "n/a", ""])
+        self.assertEqual(out["card_phone"], "(555) 123-4567")
+        self.assertEqual(out["name"], "Ada Lovelace")
+        self.assertEqual(out["work_auth"], ["Authorized \u00b7 United States", "Student visa \u00b7 Canada"])
+
+    def test_python_resume_phone_matches_the_browser_default(self):
+        from jobomatic import resume
+        self.assertEqual([resume._phone(v) for v in ("+15551234567", "+442079460958", "5551234567", "+353 1 234 5678", "n/a", "", None)],
+                         ["(555) 123-4567", "+44 20 7946 0958", "(555) 123-4567", "+353 1234 5678", "n/a", "", ""])
 
     def test_accessible_names_and_structure(self):
         out = self.run_node(NODE_A11Y)

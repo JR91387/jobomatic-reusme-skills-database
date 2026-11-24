@@ -7,14 +7,17 @@ CREATE TABLE people (
   id                 INTEGER PRIMARY KEY,
   name               TEXT NOT NULL UNIQUE,
   full_name          TEXT,
+  first_name         TEXT,
+  last_name          TEXT,
   other_names        TEXT,
   headline           TEXT,
   location           TEXT,
   phone              TEXT,
   email              TEXT,
-  linkedin           TEXT,
   summary            TEXT,
   work_authorization TEXT,
+  work_auth_status   TEXT CHECK (work_auth_status IN ('Authorized','Needs sponsorship','Other')),
+  work_auth_country  TEXT,
   status             TEXT NOT NULL DEFAULT 'Active' CHECK (status IN ('Active','Archived')),
   updated_by         TEXT CHECK (updated_by IN ('user','ai','app')),
   updated_at         TEXT
@@ -176,7 +179,7 @@ CREATE TABLE skills (
   id         INTEGER PRIMARY KEY,
   person_id  INTEGER NOT NULL REFERENCES people(id),
   name       TEXT NOT NULL,
-  category   TEXT CHECK (category IN ('Skill','System','Method','Standard')),
+  category   TEXT CHECK (category IN ('Skill','System','Application/Software','Method','Standard')),
   status     TEXT NOT NULL DEFAULT 'Verified' CHECK (status IN ('Verified','Needs review','Deprecated')),
   updated_by TEXT CHECK (updated_by IN ('user','ai','app')),
   updated_at TEXT,
@@ -285,9 +288,10 @@ CREATE VIEW resume_lines_ranked AS
 CREATE VIEW resume_json AS
   SELECT t.name AS track, json_object(
     'track', t.name,
-    'person', json_object('name', p.name, 'full_name', p.full_name, 'headline', p.headline, 'location', p.location,
-                          'email', p.email, 'phone', p.phone, 'linkedin', p.linkedin, 'summary', p.summary,
-                          'work_authorization', p.work_authorization),
+    'person', json_object('name', p.name, 'full_name', p.full_name, 'first_name', p.first_name, 'last_name', p.last_name,
+                          'headline', p.headline, 'location', p.location, 'email', p.email, 'phone', p.phone,
+                          'summary', p.summary, 'work_authorization', p.work_authorization,
+                          'work_auth_status', p.work_auth_status, 'work_auth_country', p.work_auth_country),
     'links', json((SELECT json_group_array(json_object('id', id, 'kind', kind, 'label', label, 'url', url))
                    FROM (SELECT * FROM links WHERE person_id = p.id AND status = 'Active' ORDER BY sort, id))),
     'employers', json((SELECT json_group_array(json_object(
@@ -350,9 +354,13 @@ CREATE VIEW resume_json AS
 -- Everything known about the Active person, any status but Deprecated: what the Q&A and fill prompts start from.
 CREATE VIEW profile_json AS
   SELECT json_object(
-    'person', json_object('id', p.id, 'name', p.name, 'full_name', p.full_name, 'headline', p.headline,
-                          'location', p.location, 'email', p.email, 'phone', p.phone, 'linkedin', p.linkedin,
-                          'work_authorization', p.work_authorization, 'summary', p.summary),
+    'person', json_object('id', p.id, 'name', p.name, 'full_name', p.full_name, 'first_name', p.first_name,
+                          'last_name', p.last_name, 'headline', p.headline, 'location', p.location, 'email', p.email,
+                          'phone', p.phone, 'work_authorization', p.work_authorization,
+                          'work_auth_status', p.work_auth_status, 'work_auth_country', p.work_auth_country,
+                          'summary', p.summary),
+    'links', json((SELECT json_group_array(json_object('id', id, 'kind', kind, 'label', label, 'url', url, 'status', status))
+                   FROM (SELECT * FROM links WHERE person_id = p.id AND status <> 'Deprecated' ORDER BY sort, id))),
     'employers', json((SELECT json_group_array(json_object(
                          'id', id, 'name', name, 'location', location, 'website', website, 'notes', notes, 'status', status))
                        FROM (SELECT * FROM employers WHERE person_id = p.id AND status <> 'Deprecated' ORDER BY name))),
@@ -395,7 +403,7 @@ CREATE TRIGGER people_after_ins AFTER INSERT ON people
   BEGIN
     UPDATE people SET updated_at = coalesce(NEW.updated_at, strftime('%Y-%m-%dT%H:%M:%fZ','now')), updated_by = NULL WHERE rowid = NEW.rowid;
     INSERT INTO audit (table_name, row_id, op, old_json, new_json, actor)
-      SELECT 'people', NEW.rowid, 'insert', NULL, json_set(json_object('id', x.id, 'name', x.name, 'full_name', x.full_name, 'other_names', x.other_names, 'headline', x.headline, 'location', x.location, 'phone', x.phone, 'email', x.email, 'linkedin', x.linkedin, 'summary', x.summary, 'work_authorization', x.work_authorization, 'status', x.status, 'updated_by', x.updated_by, 'updated_at', x.updated_at), '$.updated_by', NEW.updated_by), NEW.updated_by
+      SELECT 'people', NEW.rowid, 'insert', NULL, json_set(json_object('id', x.id, 'name', x.name, 'full_name', x.full_name, 'first_name', x.first_name, 'last_name', x.last_name, 'other_names', x.other_names, 'headline', x.headline, 'location', x.location, 'phone', x.phone, 'email', x.email, 'summary', x.summary, 'work_authorization', x.work_authorization, 'work_auth_status', x.work_auth_status, 'work_auth_country', x.work_auth_country, 'status', x.status, 'updated_by', x.updated_by, 'updated_at', x.updated_at), '$.updated_by', NEW.updated_by), NEW.updated_by
       FROM people x WHERE x.rowid = NEW.rowid;
   END;
 
@@ -404,7 +412,7 @@ CREATE TRIGGER people_after_upd AFTER UPDATE ON people WHEN NEW.updated_by IS NO
     UPDATE people SET updated_at = CASE WHEN NEW.updated_at IS OLD.updated_at THEN strftime('%Y-%m-%dT%H:%M:%fZ','now') ELSE NEW.updated_at END,
       updated_by = NULL WHERE rowid = NEW.rowid;
     INSERT INTO audit (table_name, row_id, op, old_json, new_json, actor)
-      SELECT 'people', NEW.rowid, 'update', json_object('id', OLD.id, 'name', OLD.name, 'full_name', OLD.full_name, 'other_names', OLD.other_names, 'headline', OLD.headline, 'location', OLD.location, 'phone', OLD.phone, 'email', OLD.email, 'linkedin', OLD.linkedin, 'summary', OLD.summary, 'work_authorization', OLD.work_authorization, 'status', OLD.status, 'updated_by', OLD.updated_by, 'updated_at', OLD.updated_at), json_set(json_object('id', x.id, 'name', x.name, 'full_name', x.full_name, 'other_names', x.other_names, 'headline', x.headline, 'location', x.location, 'phone', x.phone, 'email', x.email, 'linkedin', x.linkedin, 'summary', x.summary, 'work_authorization', x.work_authorization, 'status', x.status, 'updated_by', x.updated_by, 'updated_at', x.updated_at), '$.updated_by', NEW.updated_by), NEW.updated_by
+      SELECT 'people', NEW.rowid, 'update', json_object('id', OLD.id, 'name', OLD.name, 'full_name', OLD.full_name, 'first_name', OLD.first_name, 'last_name', OLD.last_name, 'other_names', OLD.other_names, 'headline', OLD.headline, 'location', OLD.location, 'phone', OLD.phone, 'email', OLD.email, 'summary', OLD.summary, 'work_authorization', OLD.work_authorization, 'work_auth_status', OLD.work_auth_status, 'work_auth_country', OLD.work_auth_country, 'status', OLD.status, 'updated_by', OLD.updated_by, 'updated_at', OLD.updated_at), json_set(json_object('id', x.id, 'name', x.name, 'full_name', x.full_name, 'first_name', x.first_name, 'last_name', x.last_name, 'other_names', x.other_names, 'headline', x.headline, 'location', x.location, 'phone', x.phone, 'email', x.email, 'summary', x.summary, 'work_authorization', x.work_authorization, 'work_auth_status', x.work_auth_status, 'work_auth_country', x.work_auth_country, 'status', x.status, 'updated_by', x.updated_by, 'updated_at', x.updated_at), '$.updated_by', NEW.updated_by), NEW.updated_by
       FROM people x WHERE x.rowid = NEW.rowid;
   END;
 
@@ -981,7 +989,7 @@ CREATE TRIGGER employers_search_upd AFTER UPDATE OF name, status ON employers
     INSERT INTO search_index (source_table, source_id, text) SELECT 'employers', NEW.id, coalesce(NEW.name, '') WHERE NEW.status <> 'Deprecated';
   END;
 
-PRAGMA user_version = 4;  -- keep equal to store.SCHEMA_VERSION
+PRAGMA user_version = 5;  -- keep equal to store.SCHEMA_VERSION
 
 -- ux_v2 triggers
 -- A row the AI adds is not trusted until the person has seen it: once its insert is audited it is flipped to

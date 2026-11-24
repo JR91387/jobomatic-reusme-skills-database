@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "job-o-matic"
-version = "1.1.0"
+version = "1.2.0"
 description = "A local career database your AI uses to write resumes fast. MCP server + local app; one SQLite file on your computer."
 readme = "docs/pypi.md"
 license = "MIT"
@@ -20,7 +20,7 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Topic :: Office/Business",
 ]
-dependencies = ["mcp>=2.3,<3", "pypdf>=6"]
+dependencies = ["mcp>=2.3,<3", "phonenumbers>=8.13", "pypdf>=6"]
 
 [project.urls]
 Homepage = "https://github.com/JR91387/jobomatic-reusme-skills-database"
@@ -42,6 +42,9 @@ exclude = ["**/__pycache__"]
 "src/web" = "jobomatic/_data/web"
 "templates" = "jobomatic/_data/templates"
 "docs/AI_GUIDE.md" = "jobomatic/_data/AI_GUIDE.md"
+"assets/icon-256.png" = "jobomatic/_data/assets/icon-256.png"
+"assets/icon.ico" = "jobomatic/_data/assets/icon.ico"
+"assets/icon.icns" = "jobomatic/_data/assets/icon.icns"
 
 [tool.hatch.build.targets.sdist]
-include = ["src", "templates", "docs/AI_GUIDE.md", "docs/pypi.md", "LICENSE", "NOTICE.md", "README.md", "requirements.txt", "tests", "pyproject.toml"]
+include = ["src", "templates", "docs/AI_GUIDE.md", "assets/icon-256.png", "assets/icon.ico", "assets/icon.icns", "docs/pypi.md", "LICENSE", "NOTICE.md", "README.md", "requirements.txt", "tests", "pyproject.toml"]

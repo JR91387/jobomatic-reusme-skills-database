@@ -108,6 +108,7 @@ def render_html(data_js):
     html = _replace_once(html, '<script src="vendor/sql-wasm.js"></script>', data)
     html = _replace_once(html, '<script src="resume_render.js"></script>',
                          _script((WEB_DIR / "resume_render.js").read_text(encoding="utf-8")))
+    html = _replace_once(html, '<script src="updates.js"></script>', "")  # update notices need the running app
     return _replace_once(html, '<script src="app.js"></script>', _script((WEB_DIR / "app.js").read_text(encoding="utf-8")))
 
 

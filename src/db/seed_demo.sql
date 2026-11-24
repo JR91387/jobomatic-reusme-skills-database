@@ -1,14 +1,16 @@
 -- Demo data: every name, employer, number and contact below is invented. Runs after seed_blank.sql.
 BEGIN;
 
-INSERT INTO people (id, name, full_name, headline, location, phone, email, linkedin, summary, work_authorization, updated_by) VALUES
-  (1, 'Odalys Brannigan-Voss', 'Odalys Brannigan-Voss',
+INSERT INTO people (id, name, full_name, first_name, last_name, headline, location, phone, email, summary,
+                    work_authorization, work_auth_status, work_auth_country, updated_by) VALUES
+  (1, 'Odalys Brannigan-Voss', 'Odalys Brannigan-Voss', 'Odalys', 'Brannigan-Voss',
    'Operations Coordinator - scheduling, inventory and vendor logistics',
-   'Springfield Heights, Ohio', '555-0142', 'odalys@example.com', 'https://example.com/in/odalys-brannigan-voss',
+   'Springfield Heights, Ohio', '+15555550142', 'odalys@example.com',
    'Operations coordinator with ten years in warehousing, dispatch and light manufacturing. Known for turning messy handoffs into simple daily routines that people actually follow.',
-   'Authorized to work in the United States', 'app');
+   'Authorized to work in the United States', 'Authorized', 'United States', 'app');
 
 INSERT INTO links (person_id, kind, label, url, sort, updated_by) VALUES
+  (1, 'LinkedIn', NULL, 'https://example.com/in/odalys-brannigan-voss', 0, 'app'),
   (1, 'Website', 'Personal site', 'https://odalys.example.com', 1, 'app'),
   (1, 'Portfolio', 'Process maps', 'https://odalys.example.com/process-maps', 2, 'app');
 

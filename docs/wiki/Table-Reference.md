@@ -16,11 +16,11 @@ Every table, view, column and rule, in the database's own words (`schema_guide`)
 | [`item_originals`](#item_originals) | table | Attachments: which source documents (originals) back up which items. One document can back many items and one item many documents. |
 | [`items`](#items) | table | Everything done or received: projects, responsibilities, achievements, awards, publications, volunteer work, talks, recommendations, reviews and kudos. Usually under a position; an item with no position is the person's own (an award or publication outside a job). Resume lines are worded from items. |
 | [`last_change`](#last_change) | view | Who last changed each row (user, ai or app) and when. Read only; the MCP list tool reads it. |
-| [`links`](#links) | table | Web links shown in the resume contact line. |
+| [`links`](#links) | table | Web links shown in the resume contact line. LinkedIn lives here (kind LinkedIn). |
 | [`originals`](#originals) | table | Index of unedited source documents (past resumes, reviews, job descriptions) kept in the originals/ folders. The files are never changed. |
 | [`people`](#people) | table | The person this career repository is about. One Active person per install. |
 | [`positions`](#positions) | table | Titles held: one row per title at an employer, from start_date to end_date. The Experience section of a resume. |
-| [`profile_json`](#profile_json) | view | One row: everything about the Active person as one JSON document (person, employers, positions with their employer, items with their metrics, attachments (original_ids) and their position as employer and job_title, skills, education). Start here to answer interview questions or write a profile or section. |
+| [`profile_json`](#profile_json) | view | One row: everything about the Active person as one JSON document (person, links, employers, positions with their employer, items with their metrics, attachments (original_ids) and their position as employer and job_title, skills, education). Start here to answer interview questions or write a profile or section. |
 | [`qa`](#qa) | table | Interview question bank with the person's answers. Ships with 10 common questions; add the ones actually met. |
 | [`resume_json`](#resume_json) | view | One row per version (column track): the whole resume of the Active person as one JSON document (person, links, employers each with their positions, each position with ranked Short and Long lines and items_without_lines (with metrics), Verified skills, education, items that are not responsibilities or achievements (awards, projects, publications ...), and warnings: printed rows still Needs review and skills hidden because not Verified). Start here to write a resume. |
 | [`resume_lines`](#resume_lines) | view | Every resume line joined to its item (kind, title, detail), person and position, including Deprecated ones. |
@@ -29,7 +29,7 @@ Every table, view, column and rule, in the database's own words (`schema_guide`)
 | [`search_index`](#search_index) | table | Full-text index (SQLite FTS5) of employers, positions, items, metrics, resume lines, skills and Q&A. Kept current by triggers; retired rows drop out. Search it with the search tool, which ranks best match first. |
 | [`settings`](#settings) | table | App settings. Only value can be changed. |
 | [`skill_links`](#skill_links) | table | Ties a skill to the position, item or education where it was used. |
-| [`skills`](#skills) | table | Skills, systems, methods and standards. Only Verified ones print on a resume. |
+| [`skills`](#skills) | table | Skills, systems, applications and software, methods and standards. Only Verified ones print on a resume. |
 | [`tracks`](#tracks) | table | Versions: named sets of resume lines aimed at one kind of job, e.g. Original, Leadership. Every resume line belongs to one version (column bullet_variants.track). |
 
 ## audit
@@ -185,7 +185,7 @@ Every table, view, column and rule, in the database's own words (`schema_guide`)
 
 ## links
 
-*table.* Web links shown in the resume contact line.
+*table.* Web links shown in the resume contact line. LinkedIn lives here (kind LinkedIn).
 
 | Column | Type | Required | Meaning | Example |
 |---|---|---|---|---|
@@ -226,16 +226,19 @@ Every table, view, column and rule, in the database's own words (`schema_guide`)
 
 | Column | Type | Required | Meaning | Example |
 |---|---|---|---|---|
-| `name` | TEXT | yes | Short name used in the app. | Odalys Brannigan-Voss |
-| `full_name` | TEXT |  | Name as printed on a resume. | Odalys Brannigan-Voss |
+| `name` | TEXT | yes | Unique name the app uses for the person. Filled from first and last name when left empty. | Odalys Brannigan-Voss |
+| `full_name` | TEXT |  | Name as printed on a resume. Saving first_name or last_name through the app or MCP sets it to "First Last". | Odalys Brannigan-Voss |
+| `first_name` | TEXT |  | First (given) name, plus any middle names. Required for a new person. | Odalys |
+| `last_name` | TEXT |  | Last (family) name. Required for a new person. | Brannigan-Voss |
 | `other_names` | TEXT |  | Former or alternate names (for matching old documents). | Odalys Voss |
 | `headline` | TEXT |  | One-line professional headline under the name. | Operations Coordinator - scheduling, inventory and vendor logistics |
 | `location` | TEXT |  | City and state shown on the resume. | Springfield Heights, Ohio |
-| `phone` | TEXT |  | Contact phone. | 555-0142 |
-| `email` | TEXT |  | Contact email. | odalys@example.com |
-| `linkedin` | TEXT |  | LinkedIn profile URL. | https://example.com/in/odalys |
+| `phone` | TEXT |  | Contact phone in international (E.164) form. The app and MCP accept any common format (US is assumed without a country code) and store it this way. | +15555550142 |
+| `email` | TEXT |  | Contact email. Saved trimmed, with the part after @ in lower case. | odalys@example.com |
 | `summary` | TEXT |  | Professional summary paragraph for the top of a resume. |  |
-| `work_authorization` | TEXT |  | Work authorization statement. | Authorized to work in the United States |
+| `work_authorization` | TEXT |  | Work authorization note, in the person's words. Used when work_auth_status is Other. | Authorized to work in the United States |
+| `work_auth_status` | TEXT |  | Can the person work in work_auth_country without the employer sponsoring a visa: Authorized, Needs sponsorship or Other. | Authorized |
+| `work_auth_country` | TEXT |  | Country that work_auth_status is about. | United States |
 | `status` | TEXT | yes | Active or Archived. Archive instead of deleting. | Active |
 | `id` | INTEGER | key | Row number; other tables point to it. |  |
 | `updated_by` | TEXT |  | Who is writing: user, ai or app. MCP sets this for you; db.py users must set it. Cleared after it is recorded in audit. | ai |
@@ -262,7 +265,7 @@ Every table, view, column and rule, in the database's own words (`schema_guide`)
 
 ## profile_json
 
-*view.* One row: everything about the Active person as one JSON document (person, employers, positions with their employer, items with their metrics, attachments (original_ids) and their position as employer and job_title, skills, education). Start here to answer interview questions or write a profile or section.
+*view.* One row: everything about the Active person as one JSON document (person, links, employers, positions with their employer, items with their metrics, attachments (original_ids) and their position as employer and job_title, skills, education). Start here to answer interview questions or write a profile or section.
 
 
 ## qa
@@ -350,12 +353,12 @@ Every table, view, column and rule, in the database's own words (`schema_guide`)
 
 ## skills
 
-*table.* Skills, systems, methods and standards. Only Verified ones print on a resume.
+*table.* Skills, systems, applications and software, methods and standards. Only Verified ones print on a resume.
 
 | Column | Type | Required | Meaning | Example |
 |---|---|---|---|---|
 | `name` | TEXT | yes | Skill name, unique per person. | Inventory control |
-| `category` | TEXT |  | Skill, System, Method or Standard. | Method |
+| `category` | TEXT |  | Skill, System, Application/Software, Method or Standard. | Method |
 | `status` | TEXT | yes | Verified, Needs review or Deprecated. | Verified |
 | `id` | INTEGER | key | Row number; other tables point to it. |  |
 | `person_id` | INTEGER | yes | The person this row belongs to (people.id). |  |
