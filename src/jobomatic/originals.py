@@ -1,4 +1,6 @@
 import hashlib
+import os
+import stat
 from pathlib import Path
 
 from .extract import extract_for, sniff_type
@@ -13,6 +15,7 @@ FOLDERS = {
 }
 WEIGHTS = {"Review": 3, "AI output": 1}  # trust when the caller gives none; any other kind is 2
 MAX_BYTES = 25 * 1024 * 1024
+ALLOWED_SUFFIXES = {".pdf", ".docx", ".txt", ".md", ".rtf", ".html", ".htm", ".odt", ".png", ".jpg", ".jpeg"}
 
 
 def _free_name(folder, filename):
@@ -66,10 +69,25 @@ def add_original_bytes(
     return original_id
 
 
+def _check_source(source):
+    """add_original takes a path an AI may have been talked into: documents only, nothing hidden, no links."""
+    try:
+        mode = source.lstat().st_mode
+    except OSError:
+        raise ValueError(f"No file at {source}") from None
+    if not stat.S_ISREG(mode):
+        raise ValueError(f"{source} is not a regular file (links, folders and devices are refused)")
+    for part in Path(os.path.abspath(source)).parts[1:]:
+        if part.startswith("."):
+            raise ValueError(f"Refusing {source}: it is a hidden file or inside a hidden folder ({part})")
+    if source.suffix.lower() not in ALLOWED_SUFFIXES:
+        allowed = ", ".join(sorted(s[1:] for s in ALLOWED_SUFFIXES))
+        raise ValueError(f"Unsupported file type {source.suffix or '(none)'!r}; allowed: {allowed}")
+
+
 def add_original(conn, data_dir, source_path, kind, **kwargs):
-    source = Path(source_path)
-    if not source.is_file():
-        raise ValueError(f"No file at {source}")
+    source = Path(source_path).expanduser()
+    _check_source(source)
     if source.stat().st_size > MAX_BYTES:
         raise ValueError(f"File is {source.stat().st_size} bytes; the limit is {MAX_BYTES}")
     return add_original_bytes(conn, data_dir, source.name, source.read_bytes(), kind, **kwargs)

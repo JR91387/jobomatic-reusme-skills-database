@@ -8,7 +8,7 @@ The tools the Job-o-Matic MCP server offers to an MCP app. Start the server with
 |---|---|
 | [`get_profile`](#get_profile) | The whole profile in one call: person, links, employers, positions, items (each with its metrics and attached original ids), resume lines, skills, education. |
 | [`search`](#search) | Ranked full-text search over facts, resume lines, employers, positions, items, item metrics, skills and Q&A; best match first. |
-| [`resume_data`](#resume_data) | The whole resume for a track in one JSON document: person, links, employers (each with its positions, and each position with its ranked lines, the item and metrics behind each line), items (awards, projects, reviews . |
+| [`resume_data`](#resume_data) | The whole resume for a version (track) in one JSON document: person, links, employers (each with its positions, and each position with its ranked lines, the item and metrics behind each line), items (awards, projects, reviews . |
 | [`schema_guide`](#schema_guide) | Plain-language description of every table, view, column and rule. |
 | [`list`](#list) | List rows of a table (optionally only one status), newest ids last. |
 | [`get`](#get) | Fetch one row by id, with created_by and last_changed_by (user, ai or app, from audit); images omit the picture bytes. |
@@ -41,7 +41,7 @@ questions with no answer yet are left out unless include_unanswered. Returns sou
 
 Parameters: `track`: str = 'Original'
 
-The whole resume for a track in one JSON document: person, links, employers (each with its positions, and each position with its ranked lines, the
+The whole resume for a version (track) in one JSON document: person, links, employers (each with its positions, and each position with its ranked lines, the
 item and metrics behind each line), items (awards, projects, reviews ... with metrics), Verified skills and education. Use it to write a resume or cover letter.
 
 ## schema_guide

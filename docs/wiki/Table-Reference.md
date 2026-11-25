@@ -57,7 +57,7 @@ Every table, view, column and rule, in the database's own words (`schema_guide`)
 | `wording` | TEXT | yes | The line exactly as printed on a resume. | Merged 14 inventory spreadsheets into one shared tracker, reducing weekly reconciliation from 6 hours to 90 minutes. |
 | `angle` | TEXT |  | What the line emphasizes. | Efficiency |
 | `length` | TEXT |  | Short (one line), Long (two lines) or Story (a paragraph for cover letters and interviews; never printed on a resume). | Short |
-| `track` | TEXT | yes | Version name (tracks.name); must exist first. | Original |
+| `track` | TEXT | yes | Version name (tracks.name); must exist first. Any case is accepted and stored as tracks spells it. | Original |
 | `source` | TEXT |  | Where the wording came from. | Past resume 2022 |
 | `status` | TEXT | yes | Verified, Needs review or Deprecated. | Verified |
 | `id` | INTEGER | key | Row number; other tables point to it. |  |

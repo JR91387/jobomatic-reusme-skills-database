@@ -104,7 +104,8 @@ def _add_windows(target):
     r = subprocess.run(windows_command(script), capture_output=True, text=True, timeout=PS_TIMEOUT,
                        check=False, creationflags=flags)
     if r.returncode != 0 or not target.exists():
-        raise OSError((r.stderr or r.stdout or f"PowerShell exit {r.returncode}").strip().splitlines()[-1])
+        lines = (r.stderr or r.stdout or "").strip().splitlines()
+        raise OSError(lines[-1].strip() if lines else f"PowerShell exit {r.returncode}")
 
 
 # ---------- Linux / BSD (freedesktop) ----------
@@ -171,6 +172,8 @@ def mac_launcher(program, args):
 
 
 def _add_mac(target):
+    if target.exists() and not _is_ours_mac(target):
+        raise OSError(f"{target} exists and is not Job-o-Matic; leaving it alone")
     program, args = launch_command("mac")
     contents = target / "Contents"
     (contents / "MacOS").mkdir(parents=True, exist_ok=True)

@@ -36,10 +36,15 @@ server = MCPServer(
         "add_original stores a file from this computer: one the person points you to, or kind 'AI output' for a file you wrote.\n"
         "build_resume prints Short and Long lines only; tell the person about any warnings it returns.\n"
         "Start with schema_guide: it explains every table, column and rule in plain words.\n"
-        "To build a resume, call resume_data once: it returns the whole resume for a track as one JSON document.\n"
+        "To build a resume, call resume_data once: it returns the whole resume for a version as one JSON document.\n"
         "To tailor to a job, paste the job description into search: it returns the best-matching lines and facts first."
     ),
 )
+
+
+def _wording(exc):
+    """The app calls a track a "version"; so do the errors the AI sees (the tool argument is still `track`)."""
+    return str(exc).replace("Unknown version (track)", "Unknown version").replace("Unknown track", "Unknown version")
 
 
 def tool(name=None):
@@ -50,7 +55,7 @@ def tool(name=None):
             try:
                 return fn(*args, **kwargs)
             except (ValueError, sqlite3.Error, OSError, NotImplementedError) as exc:
-                raise ToolError(f"{type(exc).__name__}: {exc}") from exc
+                raise ToolError(f"{type(exc).__name__}: {_wording(exc)}") from exc
         return server.tool(name=name)(wrapper)
     return deco
 
@@ -70,7 +75,7 @@ def _rows(sql, params=()):
 def _refresh():
     """Rebuild the offline viewer (and its page) so the app shows what was just written."""
     try:
-        viewer.build(DB_PATH)
+        viewer.build(DB_PATH, defer_html=True)  # the view-only page follows when quiet, and when this process exits
     except Exception as exc:
         raise OSError(f"The change was written, but refreshing the app file failed: {exc}") from exc
 
@@ -86,16 +91,22 @@ def _table(table):
 def get_profile() -> dict:
     """The whole profile in one call: person, links, employers, positions, items (each with its metrics and attached
     original ids), resume lines, skills, education. Items hold every kind: responsibilities, achievements, awards, projects, reviews ..."""
-    people = _rows("SELECT * FROM people WHERE status='Active' ORDER BY id LIMIT 1")
     live = "status <> 'Deprecated'"
-    profile = json.loads(_rows("SELECT profile FROM profile_json")[0]["profile"]) if people else {}
+    conn = _conn()
+    try:
+        people = store.read(conn, "SELECT * FROM people WHERE status='Active' ORDER BY id LIMIT 1")
+        profile = json.loads(store.read(conn, "SELECT profile FROM profile_json")[0]["profile"]) if people else {}
+        links = store.read(conn, f"SELECT * FROM links WHERE {live} ORDER BY sort, id")
+        resume_lines = store.read(conn, f"SELECT * FROM resume_lines WHERE {live} ORDER BY item_id, id")
+    finally:
+        conn.close()
     return {
         "person": people[0] if people else None,
-        "links": _rows(f"SELECT * FROM links WHERE {live} ORDER BY sort, id"),
+        "links": links,
         "employers": profile.get("employers", []),
         "positions": profile.get("positions", []),
         "items": profile.get("items", []),
-        "resume_lines": _rows(f"SELECT * FROM resume_lines WHERE {live} ORDER BY item_id, id"),
+        "resume_lines": resume_lines,
         "skills": profile.get("skills", []),
         "education": profile.get("education", []),
     }
@@ -115,7 +126,7 @@ def search(text: str, limit: int = 20, include_unanswered: bool = False) -> list
 
 @tool()
 def resume_data(track: str = "Original") -> dict:
-    """The whole resume for a track in one JSON document: person, links, employers (each with its positions, and each position with its ranked lines, the
+    """The whole resume for a version (track) in one JSON document: person, links, employers (each with its positions, and each position with its ranked lines, the
     item and metrics behind each line), items (awards, projects, reviews ... with metrics), Verified skills and education. Use it to write a resume or cover letter."""
     conn = _conn()
     try:
@@ -286,7 +297,10 @@ def build_resume(template: str, track: str = "Original") -> dict:
 def main():
     """Entry point for `job-o-matic-mcp` (stdio)."""
     paths.ensure_db(DB_PATH)
-    server.run()
+    try:
+        server.run()
+    finally:
+        viewer.flush_html()  # the view-only page must be current when this process ends
 
 
 if __name__ == "__main__":

@@ -22,6 +22,25 @@ def config_path():
     return Path.home() / ".config" / "Claude" / "claude_desktop_config.json"
 
 
+def load_config(path):
+    """Reads the config (a BOM is fine). Exits with a plain message when it is not a usable settings file."""
+    try:
+        config = json.loads(path.read_text(encoding="utf-8-sig"))
+    except json.JSONDecodeError as e:
+        sys.exit(f"Could not read {path}: it is not valid JSON ({e}). Nothing was changed.")
+    if not isinstance(config, dict):
+        sys.exit(f"Could not use {path}: expected a JSON object at the top. Nothing was changed.")
+    if config.get("mcpServers") is not None and not isinstance(config["mcpServers"], dict):
+        sys.exit(f"Could not use {path}: \"mcpServers\" is not an object. Nothing was changed.")
+    return config
+
+
+def write_atomic(path, text):
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(text, encoding="utf-8")
+    os.replace(tmp, path)
+
+
 def entry():
     python = BUNDLE / "python" / ("python.exe" if sys.platform == "win32" else "bin/python3")
     return {
@@ -50,12 +69,14 @@ def main():
     if path.exists():
         backup = path.with_name(f"{path.name}.{datetime.now().astimezone():%Y%m%d%H%M%S}.bak")
         shutil.copy2(path, backup)
-        config = json.loads(path.read_text(encoding="utf-8"))
-    servers = config.setdefault("mcpServers", {})
+        config = load_config(path)
+    servers = config.get("mcpServers")
+    if servers is None:
+        servers = config["mcpServers"] = {}
     existed = "job-o-matic" in servers
     servers["job-o-matic"] = snippet["mcpServers"]["job-o-matic"]
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+    write_atomic(path, json.dumps(config, indent=2) + "\n")
     if existed:
         print(f"Job-o-Matic was already set \u2014 updated in {path}. Your other settings were kept.")
     else:

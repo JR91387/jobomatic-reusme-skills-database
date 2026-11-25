@@ -4,8 +4,10 @@ import json
 import os
 import re
 import sqlite3
+import threading
+import time
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import NamedTuple
 
@@ -47,24 +49,74 @@ def connect(path):
     <data_dir>/backups/ and upgraded first; older files are refused."""
     if not Path(path).exists():
         raise FileNotFoundError(f"No database at {path}; create it with --init")
-    conn = _open(path)
-    try:
-        version = conn.execute("PRAGMA user_version").fetchone()[0]
-        _check_version(version)
-        if version >= SCHEMA_VERSION:
-            return conn
-        conn.close()
-        upgrade(path, version)
-        conn = _open(path)
-        _check_version(conn.execute("PRAGMA user_version").fetchone()[0])
-    except Exception:
-        conn.close()
-        raise
+    conn, version = _open_current(path)
+    if conn is not None:
+        return conn
+    upgrade(path, version)
+    conn, version = _open_current(path)
+    if conn is None:
+        raise RuntimeError(f"The upgrade left the file at version {version}, not {SCHEMA_VERSION}")
     return conn
 
 
-SCHEMA_VERSION = 5
+def _open_current(path):
+    """(connection, version); the connection is None (closed again) when the file needs an upgrade. Holds the
+    shared upgrade lock while the file is open, so it never opens the old file of an upgrade about to swap."""
+    with _upgrade_lock(path, shared=True):
+        conn = _open(path)
+        try:
+            version = conn.execute("PRAGMA user_version").fetchone()[0]
+            _check_version(version)
+        except Exception:
+            conn.close()
+            raise
+        if version >= SCHEMA_VERSION:
+            return conn, version
+        conn.close()
+        return None, version
+
+
+SCHEMA_VERSION = 6
 OLDEST_UPGRADABLE = 4
+LOCK_WAIT = 120  # seconds a program waits for another one's upgrade
+
+
+@contextmanager
+def _upgrade_lock(path, shared=False):
+    """An OS lock on <db>.lock: upgrade() holds it exclusively for the whole upgrade, connect() shared while it
+    opens the file. (Windows has no shared lock, so there every holder is exclusive, briefly.) A folder that
+    cannot be written gets no lock; nothing can upgrade a file there anyway."""
+    try:
+        lock = open(f"{path}.lock", "a+b")  # noqa: SIM115 - closed below, which releases the lock
+    except OSError:
+        yield
+        return
+    try:
+        deadline = time.monotonic() + LOCK_WAIT
+        while True:
+            try:
+                if os.name == "nt":
+                    import msvcrt
+                    lock.seek(0)
+                    msvcrt.locking(lock.fileno(), msvcrt.LK_NBLCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(lock.fileno(), (fcntl.LOCK_SH if shared else fcntl.LOCK_EX) | fcntl.LOCK_NB)
+                break
+            except OSError:
+                if time.monotonic() > deadline:
+                    raise RuntimeError("Another Job-o-Matic program has been upgrading this file for "
+                                       f"{LOCK_WAIT} seconds. Close it, then open the file again.") from None
+                time.sleep(0.01)
+        try:
+            yield
+        finally:
+            if os.name == "nt":
+                import msvcrt
+                lock.seek(0)
+                msvcrt.locking(lock.fileno(), msvcrt.LK_UNLCK, 1)
+    finally:
+        lock.close()
 
 
 def _check_version(version):
@@ -80,52 +132,89 @@ def _build_schema(conn, seed=True):
         conn.executescript((SQL_DIR / name).read_text(encoding="utf-8"))
 
 
+def _unique(path, tag):
+    """<path>.<tag>.<pid>.<thread>: a temp name no other program or thread uses at the same time."""
+    path = Path(path)
+    return path.with_name(f"{path.name}.{tag}.{os.getpid()}.{threading.get_ident()}")
+
+
+def _unlink_with_companions(path):
+    for suffix in ("", "-journal", "-wal", "-shm"):
+        Path(str(path) + suffix).unlink(missing_ok=True)
+
+
 def new_database(path):
+    """Builds the file under a temp name, then links it into place without replacing anything: when two
+    programs create it at once, one wins and the other gets FileExistsError; neither touches the winner's file."""
     path = Path(path)
     if path.exists():
         raise FileExistsError(f"{path} already exists")
     path.parent.mkdir(parents=True, exist_ok=True)
-    conn = _open(path)
+    tmp = _unique(path, "new")
     try:
-        _build_schema(conn)
-    except Exception:
-        conn.close()
-        for suffix in ("", "-wal", "-shm"):
-            Path(str(path) + suffix).unlink(missing_ok=True)
-        raise
-    conn.close()
+        conn = _open(tmp)
+        try:
+            _build_schema(conn)
+        finally:
+            conn.close()
+        try:
+            os.link(tmp, path)
+        except FileExistsError:
+            raise FileExistsError(f"{path} already exists") from None
+        except OSError:
+            if os.name != "nt":
+                raise
+            os.rename(tmp, path)  # no hard links on this drive; a Windows rename never replaces a file
+    finally:
+        _unlink_with_companions(tmp)
 
 
 # ---- Upgrades ---------------------------------------------------------------------------------------------
 # One step per version: UPGRADES[n] turns a version-n file into version n+1 in place. A new version adds a step.
 
 def upgrade(path, version):
-    """Backs the file up, then runs every step from `version` to SCHEMA_VERSION. Returns the backup path."""
+    """Backs the file up, then runs every step from its version to SCHEMA_VERSION, all under the exclusive
+    upgrade lock: a second program waits, then finds the file current (the version is read again under the
+    lock; `version` only says an upgrade is due). Returns the backup path, or None if there was nothing left
+    to do."""
     path = Path(path)
     if version < OLDEST_UPGRADABLE or version >= SCHEMA_VERSION:
         raise RuntimeError(f"Cannot upgrade schema {version} to {SCHEMA_VERSION}")
-    _take_sole_access(path)
-    stamp = datetime.now(timezone.utc).astimezone().strftime("%Y%m%d-%H%M%S")
-    backup = path.parent / "backups" / f"jobomatic_v{version}_{stamp}.db"
-    try:
-        backup.parent.mkdir(parents=True, exist_ok=True)
-        checked_copy(path, backup)
-    except Exception as exc:
-        raise RuntimeError(f"This file needs an upgrade to version {SCHEMA_VERSION}, but the backup copy failed "
-                           f"({exc}); nothing was changed. Free some disk space or check the folder "
-                           f"{backup.parent} can be written, then open it again.") from exc
-    while version < SCHEMA_VERSION:
+    with _upgrade_lock(path):
+        conn = sqlite3.connect(path)
         try:
-            UPGRADES[version](path)
+            version = conn.execute("PRAGMA user_version").fetchone()[0]
+        finally:
+            conn.close()
+        if version >= SCHEMA_VERSION:
+            return None
+        _check_version(version)
+        _take_sole_access(path)
+        stamp = datetime.now(UTC).astimezone().strftime("%Y%m%d-%H%M%S")
+        backup = path.parent / "backups" / f"jobomatic_v{version}_{stamp}.db"
+        try:
+            backup.parent.mkdir(parents=True, exist_ok=True)
+            checked_copy(path, backup)
         except Exception as exc:
-            raise RuntimeError(f"Upgrading from version {version} failed ({exc}). The file was not changed; "
-                               f"a copy from before the upgrade is at {backup}.") from exc
-        version += 1
+            raise RuntimeError(f"This file needs an upgrade to version {SCHEMA_VERSION}, but the backup copy "
+                               f"failed ({exc}); nothing was changed. Free some disk space or check the folder "
+                               f"{backup.parent} can be written, then open it again.") from exc
+        start = version
+        while version < SCHEMA_VERSION:
+            try:
+                UPGRADES[version](path)
+            except Exception as exc:
+                state = ("The file was not changed" if version == start else
+                         f"The steps before it were saved, so the file is now version {version}")
+                raise RuntimeError(f"Upgrading from version {version} to {version + 1} failed ({exc}). {state}; "
+                                   f"a copy from before the upgrade is at {backup}.") from exc
+            version += 1
     return backup
 
 
 def _take_sole_access(path):
-    """Leaves WAL mode, which folds the -wal file in and only works when no other program has the file open."""
+    """Leaves WAL mode, which folds the -wal file in and only works when no other program has the file open.
+    (Not a lock: the upgrade lock keeps other Job-o-Matic programs out; _rebuild guards against the rest.)"""
     conn = sqlite3.connect(path, isolation_level=None)
     try:
         conn.execute("PRAGMA busy_timeout=5000")
@@ -139,16 +228,19 @@ def _take_sole_access(path):
                            "Job-o-Matic windows and your AI app, then open it again.")
 
 
-def _rebuild(path, fill=None, after_copy=None):
+def _rebuild(path, fill=None, after_copy=None, version=None):
     """Rebuild step: build a fresh file from the current schema (no seed rows; schema_guide comes from the new
-    schema), copy every row across with its rowid (columns matched by name; `fill(table, cols, rows)` may
+    schema), stamped `version` (the step's target, so the later steps still run), copy every row across with its rowid (columns matched by name; `fill(table, cols, rows)` may
     rewrite a table's columns and rows), check the row counts per table, run `after_copy(conn)` on the new file
-    with the triggers back on, then swap the files. Triggers are off while copying, so audit history and
-    updated_at are copied exactly and the copy itself adds no audit rows."""
+    with the triggers and foreign keys back on, check references and integrity, then swap the files. Triggers
+    are off while copying, so audit history and updated_at are copied exactly and the copy itself adds no audit
+    rows. From the copy until the swap the old file is held under a read transaction, so no other program can
+    commit to it (a write slipping in between the two transactions is caught by data_version and stops the
+    upgrade); on Windows the hold ends just before the swap, which Windows refuses while the file is open."""
     path = Path(path)
-    tmp = path.with_name(path.name + ".upgrade")
-    for suffix in ("", "-journal", "-wal", "-shm"):
-        Path(str(tmp) + suffix).unlink(missing_ok=True)
+    tmp = _unique(path, "upgrade")
+    _unlink_with_companions(tmp)
+    old = None
     try:
         new = sqlite3.connect(tmp, isolation_level=None)
         try:
@@ -163,10 +255,10 @@ def _rebuild(path, fill=None, after_copy=None):
         finally:
             new.close()
         old = sqlite3.connect(path, isolation_level=None)
+        old.execute("PRAGMA busy_timeout=5000")
+        old.execute("ATTACH DATABASE ? AS new", (str(tmp),))
         try:
-            old.execute("PRAGMA busy_timeout=5000")
-            old.execute("ATTACH DATABASE ? AS new", (str(tmp),))
-            old.execute("BEGIN EXCLUSIVE")
+            old.execute("BEGIN")
             old_tables = {r[0] for r in old.execute(
                 "SELECT name FROM main.sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' "
                 "AND name NOT LIKE 'search_index_%' AND name <> 'schema_guide'")}
@@ -189,32 +281,43 @@ def _rebuild(path, fill=None, after_copy=None):
                 after = old.execute(f'SELECT count(*) FROM new."{table}"').fetchone()[0]
                 if before != after:
                     raise RuntimeError(f"{table}: {before} rows before, {after} after")
+            seen = old.execute("PRAGMA main.data_version").fetchone()[0]
             old.execute("COMMIT")
-            old.execute("DETACH DATABASE new")
         except BaseException:
             if old.in_transaction:
                 old.execute("ROLLBACK")
             raise
-        finally:
-            old.close()
+        old.execute("DETACH DATABASE new")
+        old.execute("BEGIN")
+        old.execute("SELECT count(*) FROM main.sqlite_master").fetchone()  # read lock: writers wait until the swap
+        if old.execute("PRAGMA main.data_version").fetchone()[0] != seen:
+            raise RuntimeError("another program wrote to the file during the upgrade; open it again")
         new = sqlite3.connect(tmp, isolation_level=None)
         try:
+            new.execute("PRAGMA foreign_keys=ON")
+            new.execute("PRAGMA recursive_triggers=ON")
             new.executescript("BEGIN;\n" + ";\n".join(sql for _, sql in triggers) + ";\nCOMMIT;")
+            if version is not None:
+                new.execute(f"PRAGMA user_version = {int(version)}")
+            if after_copy:
+                after_copy(new)
             bad = new.execute("PRAGMA foreign_key_check").fetchall()
             if bad:
                 raise RuntimeError(f"broken references after copying: {bad[:5]}")
             check = new.execute("PRAGMA integrity_check").fetchone()[0]
             if check != "ok":
                 raise RuntimeError(f"integrity check: {check}")
-            if after_copy:
-                after_copy(new)
         finally:
             new.close()
+        if os.name == "nt":
+            old.close()
         os.replace(tmp, path)
     except BaseException:
-        for suffix in ("", "-journal", "-wal", "-shm"):
-            Path(str(tmp) + suffix).unlink(missing_ok=True)
+        _unlink_with_companions(tmp)
         raise
+    finally:
+        if old is not None:
+            old.close()  # a no-op if already closed; ends the read transaction on the old file
     for suffix in ("-journal", "-wal", "-shm"):  # stale companions of the old file must not touch the new one
         Path(str(path) + suffix).unlink(missing_ok=True)
 
@@ -292,10 +395,55 @@ def _v4_to_v5(path):
                              " VALUES (?, 'LinkedIn', NULL, ?, 0, 'app')", (person_id, url))
         conn.execute("COMMIT")
 
-    _rebuild(path, fill, after_copy)
+    _rebuild(path, fill, after_copy, version=5)
 
 
-UPGRADES = {4: _v4_to_v5}
+def _norm_sql(sql):
+    return " ".join(_bare(sql).rstrip(";").split())
+
+
+def _v5_to_v6(path):
+    """In place, in one transaction (no rebuild): every index and trigger in schema.sql that the file lacks or
+    has with other text is (re)created (the lookup indexes, the track-case trigger, the NOCASE rename); each
+    line's track is rewritten to the tracks row's spelling; schema_guide is reloaded."""
+    wanted = []
+    for stmt in _statements((SQL_DIR / "schema.sql").read_text(encoding="utf-8")):
+        m = re.match(r"CREATE\s+(?:UNIQUE\s+)?(INDEX|TRIGGER)\s+(\w+)", _bare(stmt), re.IGNORECASE)
+        if m:
+            wanted.append((m.group(1).upper(), m.group(2), stmt))
+    guide = _statements((SQL_DIR / "schema_guide.sql").read_text(encoding="utf-8"))
+    conn = sqlite3.connect(path, isolation_level=None)
+    try:
+        conn.execute("PRAGMA foreign_keys=ON")
+        conn.execute("PRAGMA recursive_triggers=ON")
+        conn.execute("PRAGMA busy_timeout=5000")
+        conn.execute("BEGIN IMMEDIATE")
+        have = dict(conn.execute("SELECT name, sql FROM sqlite_master WHERE type IN ('index', 'trigger') AND sql IS NOT NULL"))
+        for kind, name, stmt in wanted:
+            if name in have and _norm_sql(have[name]) == _norm_sql(stmt):
+                continue
+            if name in have:
+                conn.execute(f'DROP {kind} "{name}"')
+            conn.execute(stmt)
+        conn.execute("UPDATE bullet_variants SET track = (SELECT t.name FROM tracks t WHERE t.name = bullet_variants.track),"
+                     " updated_by = 'app'"
+                     " WHERE NOT EXISTS (SELECT 1 FROM tracks t WHERE t.name = bullet_variants.track COLLATE BINARY)"
+                     " AND EXISTS (SELECT 1 FROM tracks t WHERE t.name = bullet_variants.track)")
+        conn.execute("DROP TABLE schema_guide")
+        for stmt in guide:
+            if _first_word(stmt) not in TXN_WORDS:
+                conn.execute(stmt)
+        conn.execute("PRAGMA user_version = 6")
+        conn.execute("COMMIT")
+    except BaseException:
+        if conn.in_transaction:
+            conn.execute("ROLLBACK")
+        raise
+    finally:
+        conn.close()
+
+
+UPGRADES = {4: _v4_to_v5, 5: _v5_to_v6}
 
 
 def _statements(sql):
@@ -334,6 +482,7 @@ def run_sql(conn, sql):
         finally:
             conn.execute("PRAGMA query_only=OFF")
     before = conn.execute("SELECT coalesce(max(id), 0) FROM audit").fetchone()[0]
+    _backup_before_write(conn)
     try:
         conn.executescript("BEGIN IMMEDIATE;\n" + sql + "\n;\nCOMMIT;")
     except sqlite3.Error:
@@ -378,10 +527,20 @@ def _check_table(table):
         raise ValueError(f"Unknown table {table!r}; choose from {sorted(EDITABLE_TABLES)}")
 
 
+def _backup_before_write(conn):
+    """The day's first write: take the daily backup first, so it holds the data as it was before the change."""
+    row = conn.execute("PRAGMA database_list").fetchone()
+    if row and row[2]:
+        db_path = Path(row[2])
+        if not _today_backup(db_path).exists():
+            backup_daily(db_path)
+
+
 @contextmanager
 def _transaction(conn):
     conn.execute("BEGIN IMMEDIATE")
     try:
+        _backup_before_write(conn)
         yield
         conn.execute("COMMIT")
     except BaseException:
@@ -581,31 +740,39 @@ def search(conn, text, limit=20, include_unanswered=False):
 
 
 def checked_copy(db_path, target):
-    """VACUUM INTO a temp file, integrity-check it, then move it to `target`."""
-    tmp = target.with_suffix(".tmp")
-    tmp.unlink(missing_ok=True)
-    conn = sqlite3.connect(db_path)
+    """VACUUM INTO a temp file of this program's own, integrity-check it, then move it to `target`. The temp
+    file is gone afterwards, whatever happened."""
+    target = Path(target)
+    tmp = _unique(target, "tmp")
     try:
-        conn.execute("VACUUM INTO ?", (str(tmp),))
+        conn = sqlite3.connect(db_path)
+        try:
+            conn.execute("VACUUM INTO ?", (str(tmp),))
+        finally:
+            conn.close()
+        check = sqlite3.connect(tmp)
+        try:
+            result = check.execute("PRAGMA integrity_check").fetchone()[0]
+        finally:
+            check.close()
+        if result != "ok":
+            raise sqlite3.DatabaseError(f"Backup failed its integrity check: {result}")
+        tmp.replace(target)
     finally:
-        conn.close()
-    check = sqlite3.connect(tmp)
-    try:
-        result = check.execute("PRAGMA integrity_check").fetchone()[0]
-    finally:
-        check.close()
-    if result != "ok":
-        tmp.unlink()
-        raise sqlite3.DatabaseError(f"Backup failed its integrity check: {result}")
-    tmp.replace(target)
+        _unlink_with_companions(tmp)
+
+
+def _today_backup(db_path):
+    return Path(db_path).parent / "backups" / f"jobomatic_{datetime.now(UTC).astimezone().date().isoformat()}.db"
 
 
 def backup_daily(db_path, keep=30):
-    """One checked copy per local day in <data_dir>/backups/; only the newest `keep` are kept."""
+    """One checked copy per local day in <data_dir>/backups/; only the newest `keep` are kept. The write path calls
+    this before the day's first write, so the copy holds the data as it was before that change."""
     db_path = Path(db_path)
     folder = db_path.parent / "backups"
     folder.mkdir(exist_ok=True)
-    today = folder / f"jobomatic_{datetime.now(timezone.utc).astimezone().date().isoformat()}.db"
+    today = _today_backup(db_path)
     if not today.exists():
         checked_copy(db_path, today)
     for old in sorted(folder.glob("jobomatic_*.db"))[:-keep]:

@@ -273,6 +273,19 @@ CREATE VIEW last_change AS
   WHERE a.id = (SELECT max(b.id) FROM audit b WHERE b.table_name = a.table_name AND b.row_id = a.row_id);
 CREATE INDEX audit_row ON audit(table_name, row_id, id);
 
+-- Lookup indexes on the columns the views and the app search by (schema 6). store._v5_to_v6 adds every
+-- CREATE INDEX in this block to an older file by name. No person_id indexes: one person per install, so they
+-- cannot narrow anything.
+CREATE INDEX positions_employer ON positions(employer_id);
+CREATE INDEX items_position ON items(position_id);
+CREATE INDEX items_parent ON items(parent_item_id);
+CREATE INDEX item_metrics_item ON item_metrics(item_id);
+CREATE INDEX bullet_variants_item ON bullet_variants(item_id);
+CREATE INDEX item_originals_original ON item_originals(original_id);
+CREATE INDEX originals_position ON originals(position_id);
+CREATE INDEX originals_sha256 ON originals(sha256);
+CREATE INDEX skill_links_target ON skill_links(item_type, item_id);
+
 -- Printable lines only, best first within each job and track: Verified, then Short < Long, then id.
 -- Story lines are paragraphs for cover letters and interviews, never resume bullets.
 CREATE VIEW resume_lines_ranked AS
@@ -921,7 +934,14 @@ CREATE TRIGGER items_parent_loop_upd BEFORE UPDATE OF parent_item_id ON items WH
 
 -- A rename carries the audit actor to the rewritten lines (the guard needs updated_by).
 CREATE TRIGGER tracks_rename AFTER UPDATE OF name ON tracks WHEN OLD.name IS NOT NEW.name
-  BEGIN UPDATE bullet_variants SET track = NEW.name, updated_by = NEW.updated_by WHERE track = OLD.name; END;
+  BEGIN UPDATE bullet_variants SET track = NEW.name, updated_by = NEW.updated_by WHERE track = OLD.name COLLATE NOCASE; END;
+-- A line's track is stored as tracks spells it ('original' becomes 'Original'), so the views and the rename,
+-- which compare exactly, find it. Hooked on audit like the ux_v2 triggers, after the row's own triggers ran.
+CREATE TRIGGER bullet_variants_track_case AFTER INSERT ON audit
+  WHEN NEW.table_name = 'bullet_variants' AND NEW.op IN ('insert','update')
+    AND NOT EXISTS (SELECT 1 FROM tracks WHERE name = json_extract(NEW.new_json, '$.track') COLLATE BINARY)
+  BEGIN UPDATE bullet_variants SET track = (SELECT t.name FROM tracks t WHERE t.name = bullet_variants.track),
+    updated_by = NEW.actor WHERE rowid = NEW.row_id; END;
 CREATE TRIGGER bullet_variants_track_ins BEFORE INSERT ON bullet_variants
   WHEN NOT EXISTS (SELECT 1 FROM tracks WHERE name = NEW.track)
   BEGIN SELECT RAISE(ABORT, 'Unknown track: add it under Settings first'); END;
@@ -989,7 +1009,7 @@ CREATE TRIGGER employers_search_upd AFTER UPDATE OF name, status ON employers
     INSERT INTO search_index (source_table, source_id, text) SELECT 'employers', NEW.id, coalesce(NEW.name, '') WHERE NEW.status <> 'Deprecated';
   END;
 
-PRAGMA user_version = 5;  -- keep equal to store.SCHEMA_VERSION
+PRAGMA user_version = 6;  -- keep equal to store.SCHEMA_VERSION
 
 -- ux_v2 triggers
 -- A row the AI adds is not trusted until the person has seen it: once its insert is audited it is flipped to
