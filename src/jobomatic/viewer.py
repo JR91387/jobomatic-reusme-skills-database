@@ -1,12 +1,14 @@
 """Builds the offline viewer: my_data/viewer_data.js and one self-contained "Job-o-Matic (view only).html"."""
+import atexit
 import base64
+import contextlib
 import json
 import os
 import re
 import sqlite3
 import tempfile
 import threading
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from jobomatic import paths, resume, store
@@ -134,18 +136,76 @@ def templates_js():
     return f"window.JOBOMATIC_TEMPLATES = {json.dumps(templates).replace('<', '\\u003c')};\n"  # no </head> etc. inside the page
 
 
-def build(db_path, data_dir=None, backup=True):
-    """backup=False only at app start: the day's backup is taken after its first change, so it holds that change."""
+HTML_QUIET = 3.0  # seconds without a build before a deferred view-only page is written
+_pending = {}  # data_dir -> db_path, for pages whose HTML is older than viewer_data.js
+_pending_lock = threading.Lock()
+_timer = None
+
+
+def _flush_one(data_dir):
+    data_file = data_dir / "viewer_data.js"
+    if not data_file.is_file():  # the folder is gone: nothing to show
+        return None
+    data_js = data_file.read_text(encoding="utf-8")
+    html_path = paths.view_html_path(data_dir)
+    _write_atomic(html_path, render_html(data_js))
+    return html_path
+
+
+def flush_html(data_dir=None):
+    """Write the view-only page for every deferred build (or just data_dir's); no-op when nothing is waiting.
+    Runs when the page has been quiet for HTML_QUIET seconds, at process exit, and on demand."""
+    with _pending_lock:
+        todo = [d for d in list(_pending) if data_dir is None or d == Path(data_dir)]
+        for d in todo:
+            del _pending[d]
+    for d in todo:
+        try:
+            _flush_one(d)
+        except BaseException:
+            with _pending_lock:
+                _pending.setdefault(d, True)  # still stale: try again later
+            raise
+
+
+def _timer_fire():
+    with contextlib.suppress(Exception):  # still pending: the exit flush tries again
+        flush_html()
+
+
+def _defer_html(data_dir):
+    global _timer
+    with _pending_lock:
+        _pending[data_dir] = True
+        if _timer is not None:
+            _timer.cancel()
+        _timer = threading.Timer(HTML_QUIET, _timer_fire)
+        _timer.daemon = True
+        _timer.start()
+
+
+atexit.register(flush_html)
+
+
+def build(db_path, data_dir=None, backup=True, defer_html=False):
+    """Writes my_data/viewer_data.js and the view-only page. defer_html=True writes only the data file now; the
+    page follows when quiet for HTML_QUIET seconds, at process exit, or via flush_html().
+    backup=False only at app start (the write path takes the day's backup before its first write)."""
     db_path = Path(db_path)
     data_dir = Path(data_dir) if data_dir else db_path.parent
     store.connect(db_path).close()  # upgrades an older database before it is copied into the page
     if backup:
         store.backup_daily(db_path)
-    updated = datetime.now(timezone.utc).isoformat(timespec="microseconds")
+    updated = datetime.now(UTC).isoformat(timespec="microseconds")
     b64 = base64.b64encode(snapshot_bytes(db_path)).decode("ascii")
     texts = json.dumps(original_texts(db_path, data_dir)).replace("<", "\\u003c")
     data_js = f'window.JOBOMATIC_DB = {{updated: "{updated}", b64: "{b64}", texts: {texts}}};\n' + templates_js()
     _write_atomic(data_dir / "viewer_data.js", data_js)
     html_path = paths.view_html_path(data_dir)
+    if defer_html:
+        _defer_html(data_dir)
+        return html_path
+    with _pending_lock:
+        _pending.pop(data_dir, None)
     _write_atomic(html_path, render_html(data_js))
     return html_path

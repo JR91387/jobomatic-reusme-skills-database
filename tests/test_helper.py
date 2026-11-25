@@ -155,10 +155,8 @@ class RouteTests(HelperCase):
         self.assertIn(json.dumps(str(self.server.data_dir.resolve())) + ";window.JOBOMATIC_INFO=", page)
         self.assertNotIn(self.server.token, "".join(p.read_text(errors="ignore") for p in self.data_dir.rglob("*.json")))
 
-    def test_data_js(self):
+    def test_data_js_route_is_gone(self):
         self.assertEqual(self.request("GET", "/data.js")[0], 404)
-        (self.data_dir / "viewer_data.js").write_text("window.D=1")
-        self.assertEqual(self.request("GET", "/data.js")[2], b"window.D=1")
 
     def test_port_file(self):
         info = json.loads((self.data_dir / "app_port.json").read_text())
@@ -255,7 +253,7 @@ class WriteTests(HelperCase):
         self.assertEqual(status, 200)
         path = self.query("SELECT path FROM originals WHERE id=?", (out["id"],))[0]["path"]
         self.assertTrue((self.data_dir / (path + ".txt")).is_file())
-        status, resp, payload = self.request("GET", f"/original/{out['id']}")
+        status, resp, payload = self.request("GET", f"/original/{out['id']}?k={self.server.token}")
         self.assertEqual((status, payload), (200, b"Led a team of five.\n"))
         self.assertTrue(resp.getheader("Content-Type").startswith("text/plain"))
 

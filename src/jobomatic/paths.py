@@ -62,6 +62,9 @@ def ensure_db(db_path):
 
     db_path = Path(db_path)
     if installed() and not db_path.exists():
-        store.new_database(db_path)
+        try:
+            store.new_database(db_path)
+        except FileExistsError:  # another program (the helper or the MCP server) made it a moment ago
+            return False
         return True
     return False

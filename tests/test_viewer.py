@@ -444,7 +444,7 @@ NODE_V4 = NODE_DOM + r"""
     numbers: items.find((n) => /^item_metrics:/.test(n.attrs["data-key"] || "")).length,
     files: items.find((n) => /^item_originals:/.test(n.attrs["data-key"] || "")).length,
     add_number: labels.filter((x) => /^Add a number to /.test(x)).length,
-    attach: labels.filter((x) => /^Attach the chosen original to /.test(x)).length,
+    attach: labels.filter((x) => /^Attach the chosen source file to /.test(x)).length,
     used_by: orig.find((n) => cls(n, "used-by-list")).length,
     warn: [D.warning({ start_date: "2019", end_date: null }, { start_date: "2020-03", end_date: "2022-05" }),
       D.warning({ start_date: "2021-06", end_date: "2023" }, { start_date: "2020-03", end_date: "2022-05" }),
@@ -453,6 +453,64 @@ NODE_V4 = NODE_DOM + r"""
       D.warning({ start_date: null, end_date: null }, { start_date: "2020-03", end_date: "2022-05" }),
       D.warning({ start_date: "1990", end_date: null }, null)]
   }));
+});
+"""
+
+
+# C3 persona leftovers: no "Removed" in edit forms, a file picked before its type is kept, style and picker names,
+# the "Source files" tab, and the token-gated data load (fetch stubbed).
+NODE_C3 = NODE_DOM + r"""
+  El.prototype.addEventListener = function (k, f) { (this.ls = this.ls || {})[k] = f; };
+  const sub = (n, pred) => { const out = []; const dig = (x) => { if (x instanceof El) { if (pred(x)) out.push(x); x.children.forEach(dig); } }; dig(n); return out; };
+  const render = (view) => [].concat(T.views[view]()).flatMap((n) => sub(n, () => true));
+  const calls = [];
+  globalThis.document.getElementById = () => new El("div");
+  El.prototype.focus = () => {};
+  globalThis.setTimeout = (f) => 0;
+  globalThis.FileReader = class { readAsDataURL() { this.result = "data:text/plain;base64,QUJD"; this.onload(); } };
+  const reply = (body, ok = true, status = 200) => Promise.resolve({ ok, status, json: () => Promise.resolve(body) });
+  globalThis.fetch = (url, opts) => {
+    calls.push({ url, method: opts.method, token: opts.headers["X-JobOMatic"] });
+    if (url.indexOf("/data.json") === 0) return reply({ db: Object.assign({}, window.JOBOMATIC_DB, { updated: "newer" }) });
+    return reply({ id: 77 });
+  };
+  const out = {};
+  // 3.1: the status choices of every edit form
+  const statuses = (table, id) => {
+    T.forms.edit(table + ":" + id);
+    const sel = render({ positions: "experience", items: "items", bullet_variants: "lines", qa: "qa" }[table])
+      .filter((n) => n.tagName === "SELECT" && n.attrs.name === "status" && /-(\d+)-status$/.test(n.attrs.id) && n.attrs.id === "f-" + table + "-" + id + "-status");
+    return sel.map((s) => s.children.map(text));
+  };
+  out.status_forms = {};
+  JSON.parse(process.env.ROWS).forEach(([table, id]) => { out.status_forms[table] = statuses(table, id); });
+  T.forms.edit("test");
+  // 3.2: a file chosen before the type is kept and added once the type is set
+  const zone = render("originals");
+  const kindSel = zone.filter((n) => n.attrs.id === "up-kind")[0];
+  const picker = zone.filter((n) => n.attrs.id === "up-file")[0];
+  const file = { name: "note.txt" };
+  picker.value = "x"; picker.files = [file];
+  picker.ls.change.call(picker);
+  out.after_file = calls.filter((c) => c.url === "/upload").length;
+  kindSel.value = "Resume";
+  kindSel.ls.change.call(kindSel);
+  out.after_type = calls.filter((c) => c.url === "/upload").length;
+  // 3.4: the tab and its labels, and 3.2 links carry the token
+  out.tabs = T.tabs.map((t) => t[1]);
+  out.links = zone.filter((n) => n.tagName === "A" && /^\/original\//.test(n.attrs.href || "")).map((n) => n.attrs.href);
+  out.zone_text = zone.filter((n) => n.tagName === "H2" || n.tagName === "H3").map(text);
+  // 3.3
+  out.styles = T.c3.styles.map((s) => text(T.c3.styleLabel(s)));
+  out.short_fit = T.c3.shortText("Led the nightly dispatch board rebuild for twelve docks", 110);
+  out.short_cut = T.c3.shortText("word ".repeat(40).trim(), 110);
+  // 3.5
+  T.c3.loadData().then((db) => {
+    out.loaded_updated = db.updated;
+    out.data_call = calls.filter((c) => c.url.indexOf("/data.json?t=") === 0)[0];
+    globalThis.fetch = () => reply({ error: "no" }, false, 403);
+    return T.c3.loadData().then(() => { out.denied = null; }, (e) => { out.denied = e.status; });
+  }).then(() => process.stdout.write(JSON.stringify(out)));
 });
 """
 
@@ -705,6 +763,33 @@ class PromptCase(unittest.TestCase):
         self.assertIn(esc(kept["wording"]), out["some"])
         self.assertEqual(sorted(out["words"]), ["costs", "docks", "fewer", "reduce"])
         self.assertEqual(out["marks"], ["costs", "Docks"])
+
+    def test_c3_persona_leftovers(self):
+        conn = store.connect(self.db)
+        try:
+            rows = [[t, conn.execute(f"SELECT id FROM {t} WHERE status <> 'Deprecated' ORDER BY id").fetchone()[0]]
+                    for t in ("items", "bullet_variants", "qa", "positions")]
+        finally:
+            conn.close()
+        out = self.run_node(NODE_C3, env={**os.environ, "ROWS": json.dumps(rows)})
+        for table, forms in out["status_forms"].items():
+            with self.subTest(table=table):
+                self.assertTrue(forms, "no status select rendered")
+                for opts in forms:
+                    self.assertNotIn("Removed", opts)
+                    self.assertIn("Verified", opts)
+        self.assertEqual((out["after_file"], out["after_type"]), (0, 1))  # kept, then added when the type is chosen
+        self.assertIn("Source files", out["tabs"])
+        self.assertNotIn("Originals", out["tabs"])
+        self.assertTrue(out["links"] and all(l.endswith("?k=t") for l in out["links"]))
+        self.assertEqual(out["styles"][0], "Executive, classic serif, name centered; formal and traditional")
+        self.assertTrue(all(re.match(r"^[^ ,]+( [^ ,]+)?, \S", t) for t in out["styles"]), out["styles"])
+        self.assertEqual(out["short_fit"], "Led the nightly dispatch board rebuild for twelve docks")
+        self.assertRegex(out["short_cut"], r"word\u2026$")  # cut on a whole word
+        self.assertEqual(out["loaded_updated"], "newer")
+        self.assertRegex(out["data_call"]["url"], r"^/data\.json\?t=\d+$")
+        self.assertEqual((out["data_call"]["method"], out["data_call"]["token"]), ("GET", "t"))
+        self.assertEqual(out["denied"], 403)
 
     def test_form_select_defaults_and_discard_prompt(self):
         out = self.run_node(NODE_FORMS)

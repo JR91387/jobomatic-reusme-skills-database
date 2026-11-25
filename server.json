@@ -7,12 +7,12 @@
     "url": "https://github.com/JR91387/jobomatic-reusme-skills-database",
     "source": "github"
   },
-  "version": "1.2.0",
+  "version": "1.3.0",
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "job-o-matic",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "runtimeHint": "uvx",
       "transport": {
         "type": "stdio"

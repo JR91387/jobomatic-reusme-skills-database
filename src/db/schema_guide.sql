@@ -113,7 +113,7 @@ INSERT INTO schema_guide (object, column_name, kind, description, example) VALUE
   ('bullet_variants', 'wording', 'column', 'The line exactly as printed on a resume.', 'Merged 14 inventory spreadsheets into one shared tracker, reducing weekly reconciliation from 6 hours to 90 minutes.'),
   ('bullet_variants', 'angle', 'column', 'What the line emphasizes.', 'Efficiency'),
   ('bullet_variants', 'length', 'column', 'Short (one line), Long (two lines) or Story (a paragraph for cover letters and interviews; never printed on a resume).', 'Short'),
-  ('bullet_variants', 'track', 'column', 'Version name (tracks.name); must exist first.', 'Original'),
+  ('bullet_variants', 'track', 'column', 'Version name (tracks.name); must exist first. Any case is accepted and stored as tracks spells it.', 'Original'),
   ('bullet_variants', 'source', 'column', 'Where the wording came from.', 'Past resume 2022'),
   ('bullet_variants', 'status', 'column', 'Verified, Needs review or Deprecated.', 'Verified'),
 
@@ -189,7 +189,7 @@ INSERT INTO schema_guide (object, column_name, kind, description, example) VALUE
   ('rule:never_delete', NULL, 'rule', 'Never delete a row; retire it by setting status (Deprecated; people Archived; versions in tracks Retired). DELETE is refused.', 'UPDATE bullet_variants SET status = ''Deprecated'', updated_by = ''ai'' WHERE id = 9'),
   ('rule:one_person', NULL, 'rule', 'Only one Active person per install. The first person added claims the seeded questions and any originals added before a person existed.', NULL),
   ('rule:version_check', NULL, 'rule', 'Before updating a row you read earlier, pass its updated_at as expected_updated_at; if the person changed it since, nothing is written and you get the current row to merge.', 'UPDATE people SET headline = ''x'', updated_by = ''ai'' WHERE id = 1 AND updated_at IS ''<value you read>'''),
-  ('rule:tracks', NULL, 'rule', 'A resume line''s version (column track) must already exist in tracks (add it first). Renaming a version renames it on all its lines. Lines default to the Original version.', NULL),
+  ('rule:tracks', NULL, 'rule', 'A resume line''s version (column track) must already exist in tracks (add it first). Case does not matter: the line is stored with the version''s own spelling. Renaming a version renames it on all its lines. Lines default to the Original version.', NULL),
   ('rule:weights', NULL, 'rule', 'originals.weight is trust from 1 to 3: 3 official, 2 own, 1 loose notes (an AI output file starts at 1). When sources disagree, prefer the higher weight and note the conflict in items.notes.', NULL),
   ('rule:dates', NULL, 'rule', 'Dates are text: months as YYYY-MM (printed as "Mar 2023"), document dates as YYYY-MM-DD. Months are validated: only YYYY or YYYY-MM is accepted. An empty end_date on a position means current.', '2023-03'),
   ('rule:not_blank', NULL, 'rule', 'Typed text cannot be blank: people.name, employers.name, positions.title, items.title or items.detail (one of them), item_metrics.value, bullet_variants.wording and qa.question.', NULL),

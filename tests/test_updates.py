@@ -8,7 +8,7 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
-from jobomatic import paths, updates
+from jobomatic import paths, store, updates
 from tests.test_helper import HelperCase
 
 DAY = 24 * 3600
@@ -121,29 +121,25 @@ class Check(unittest.TestCase):
                 mock.patch.object(updates, "urlopen", return_value=github("v1.3.0")) as op:
             st = updates.check(self.data_dir)
         self.assertEqual(op.call_args[0][0].full_url, updates.GITHUB_API)
-        self.assertEqual((st["latest"], st["newer"], st["action"]), ("1.3.0", True, "download"))
+        self.assertEqual((st["latest"], st["newer"], st["action"]), ("1.3.0", True, "button"))
         self.assertTrue(st["url"].endswith("/v1.3.0"))
 
-    def test_uv_tool_and_pipx_get_a_command(self):
+    def test_uv_tool_and_pipx_get_the_button(self):
         for kind, cmd in (("uv-tool", "uv tool install --upgrade job-o-matic"), ("pipx", "pipx upgrade job-o-matic")):
-            with mock.patch.object(updates, "install_type", return_value=kind):
-                self.assertEqual(updates.action_for(kind), ("command", cmd))
-                with mock.patch.object(updates.subprocess, "run") as run:
-                    out = updates.run_update()
-                run.assert_not_called()
-                self.assertEqual(out["command"], cmd)
-                self.assertFalse(out["ok"])
+            self.assertEqual(updates.action_for(kind), ("button", cmd))
 
     def test_pip_update_runs_pip(self):
+        db = self.data_dir / "jobomatic.db"
+        store.new_database(db)
         with mock.patch.object(updates.subprocess, "run") as run:
             run.return_value = mock.Mock(returncode=0, stdout="Successfully installed job-o-matic-1.3.0\n", stderr="")
-            out = updates.run_update()
+            out = updates.run_update(db)
         argv = run.call_args[0][0]
         self.assertEqual(argv[:5], [sys.executable, "-m", "pip", "install", "--upgrade"])
         self.assertEqual(argv[-1], "job-o-matic")
         self.assertEqual(run.call_args[1]["timeout"], 300)
         self.assertTrue(out["ok"])
-        self.assertIn("Restart Job-o-Matic to finish", out["message"])
+        self.assertEqual(out["restart"], "exec")
         self.assertIn("Successfully installed", out["output"])
 
 

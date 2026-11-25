@@ -8,6 +8,7 @@ import tomllib
 from jobomatic import paths
 
 DIST_NAME = "job-o-matic"
+VERSION = "1.3.0"  # the single source: pyproject.toml and server.json must match (tests/test_updates_c5.py)
 
 
 def _from_pyproject():
@@ -19,7 +20,7 @@ def _from_pyproject():
 
 
 def get_version():
-    """'1.2.0', or None when no version can be found."""
+    """'1.3.0', or None when no version can be found."""
     if not paths.installed():
         found = _from_pyproject()
         if found:

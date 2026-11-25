@@ -4,8 +4,16 @@
     python3 scripts/build_bundles.py | tee ../05_versions/v1.0.0/build.log
 
 Downloads portable Python (cached in build/cache/), checks it against the
-release's SHA256SUMS, installs requirements.txt wheels, adds the tracked app
-files and a blank database. Any checksum mismatch or missing file aborts."""
+SHA-256 digests pinned below, installs the hash-locked wheels in
+requirements-bundle.txt (--require-hashes), adds the tracked app files and a
+blank database. Any checksum mismatch or missing file aborts.
+
+The version comes from src/jobomatic/version.py; the "What's new" text from
+scripts/release_notes/v<VERSION>.md. Refresh the wheel lock after changing
+requirements.txt:
+    uv pip compile requirements.txt -c bundle-constraints.txt --generate-hashes --universal \\
+        --python-version 3.13 --no-header -o requirements-bundle.txt
+bundle-constraints.txt holds per-platform pins (e.g. the last cryptography with macOS Intel wheels)."""
 
 import hashlib
 import os
@@ -19,9 +27,26 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-VERSION = "1.2.0"
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def read_version(path=ROOT / "src" / "jobomatic" / "version.py"):
+    """VERSION = "x.y.z" from version.py, the single source (no import: the build needs no sys.path)."""
+    m = re.search(r'^VERSION = "([^"]+)"', path.read_text(encoding="utf-8"), re.MULTILINE)
+    if not m:
+        sys.exit(f"ABORT: no VERSION in {path}")
+    return m.group(1)
+
+
+VERSION = read_version()
 PBS_TAG = "20261026"
 PBS_PYTHON = "3.13.18"
+PBS_SHA256 = {  # pinned from the release's SHA256SUMS; a new PBS_TAG needs new digests here
+    "x86_64-pc-windows-msvc": "ebe90cc1dce2dd2d7afa1f0aa9b6c269c7c0174aeabdc6a801381602b7283424",
+    "aarch64-apple-darwin": "e5af2fde6a937a0e0c795a0c595c4efb70578d57463a2657c819992b9b9acbac",
+    "x86_64-apple-darwin": "708be9e7df297f68bdae589ea9e62a621db5abe7708f79e851c41410347452d1",
+    "x86_64-unknown-linux-gnu": "126343c54daff4068efc1ac269518d0cc202d57857794948103dd1454e8881be",
+}
 PBS_URL = (
     f"https://github.com/astral-sh/python-build-standalone/releases/download/{PBS_TAG}/"
 )
@@ -49,22 +74,131 @@ OMIT = ("tests/", "scripts/build_bundles.py", "scripts/make_demo_originals.py")
 ORIGINALS = ["resumes", "job_descriptions", "reviews", "recommendations", "other"]
 VIEW_NAME = "Job-o-Matic (view only).html"
 
-ROOT = Path(__file__).resolve().parents[1]
 BUILD = ROOT / "build"
 CACHE = BUILD / "cache"
 DIST = ROOT / "dist"
 NOTES = ROOT.parent / "05_versions" / f"v{VERSION}"
+REQUIREMENTS = ROOT / "requirements-bundle.txt"
+WHATS_NEW = ROOT / "scripts" / "release_notes" / f"v{VERSION}.md"
 
-RUN = "exec ./python/bin/python3 app/src/jobomatic/helper.py --open\n"
 # The helper adds the app-menu entry itself on first run (Start Menu / app menu / ~/Applications,
-# see src/jobomatic/shortcuts.py), so the launchers only start it.
+# see src/jobomatic/shortcuts.py). The launchers start it, and first apply an update the app
+# downloaded (src/jobomatic/updates.py): .update/READY means swap .update/app and .update/python in
+# (the old ones become app.prev and python.prev) and write .update/TRIAL. The helper deletes
+# .update/ once it is listening; if Python exits with an error before that (within TRIAL_SECONDS),
+# the .prev folders go back and .update/FAILED tells the page. my_data/ is never touched.
+TRIAL_SECONDS = 30
+SH_LAUNCHER = """#!/bin/sh
+# Job-o-Matic launcher.
+CD_LINE
+PY=./python/bin/python3
+APP=app/src/jobomatic/helper.py
+TRIAL_SECONDS=${JOBOMATIC_TRIAL_SECONDS:-TRIAL_DEFAULT}
+
+give_up() {  # leave a note for the page; the next start runs normally
+    rm -rf .update && mkdir .update && : > .update/FAILED
+}
+
+restore() {  # put the previous version back
+    rm -rf app python
+    mv app.prev app && mv python.prev python
+    give_up
+}
+
+apply_update() {
+    [ -d .update/app ] && [ -d .update/python ] || return 1
+    rm -rf app.prev python.prev
+    mv app app.prev || return 1
+    if ! mv python python.prev; then
+        mv app.prev app
+        return 1
+    fi
+    if mv .update/app app && mv .update/python python; then
+        rm -f .update/READY .update/EXIT.* && : > .update/TRIAL && return 0
+    fi
+    restore
+    return 1
+}
+
+if [ -n "${JOBOMATIC_WAIT_PID:-}" ]; then  # started by "Update now": let the old helper exit first
+    i=0
+    while kill -0 "$JOBOMATIC_WAIT_PID" 2>/dev/null && [ "$i" -lt 30 ]; do
+        sleep 1
+        i=$((i + 1))
+    done
+fi
+
+if [ -f .update/READY ] && ! apply_update; then
+    echo "Job-o-Matic: the update could not be applied; starting the current version." >&2
+    [ -f .update/FAILED ] || give_up
+fi
+
+if [ -f .update/TRIAL ]; then
+    # The exit file carries this launcher's PID, so a helper from an earlier run that quits later
+    # (to install the next update) can't be mistaken for this trial's result.
+    EXIT_FILE=".update/EXIT.$$"
+    ( "$PY" "$APP" --open; status=$?; { echo "$status" > "$EXIT_FILE"; } 2>/dev/null; exit "$status" ) &
+    child=$!
+    i=0
+    while [ -f .update/TRIAL ] && [ ! -f "$EXIT_FILE" ] && [ "$i" -lt "$TRIAL_SECONDS" ]; do
+        sleep 1
+        i=$((i + 1))
+    done
+    if [ -f .update/TRIAL ] && [ -f "$EXIT_FILE" ] && [ "$(cat "$EXIT_FILE")" != 0 ]; then
+        echo "Job-o-Matic: the new version did not start; putting the previous version back." >&2
+        wait "$child"
+        restore
+        exec "$PY" "$APP" --open
+    fi
+    wait "$child"
+    exit $?
+fi
+
+exec "$PY" "$APP" --open
+""".replace("TRIAL_DEFAULT", str(TRIAL_SECONDS))
+
+BAT_LAUNCHER = r"""@echo off
+rem Job-o-Matic launcher.
+setlocal
+cd /d "%~dp0"
+if defined JOBOMATIC_WAIT_PID powershell -NoProfile -Command "Wait-Process -Id %JOBOMATIC_WAIT_PID% -Timeout 30 -ErrorAction SilentlyContinue"
+if not exist ".update\READY" goto trial
+if not exist ".update\app" goto giveup
+if not exist ".update\python" goto giveup
+if exist app.prev rmdir /s /q app.prev
+if exist python.prev rmdir /s /q python.prev
+move app app.prev >nul || goto giveup
+move python python.prev >nul || goto putapp
+move .update\app app >nul || goto restore
+move .update\python python >nul || goto restore
+del .update\READY
+type nul > .update\TRIAL
+:trial
+if not exist ".update\TRIAL" goto run
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$p = Start-Process -PassThru -FilePath 'python\pythonw.exe' -ArgumentList 'app\src\jobomatic\helper.py','--open'; $null = $p.Handle; for ($i = 0; $i -lt TRIAL_DEFAULT; $i++) { if (-not (Test-Path '.update\TRIAL')) { exit 0 }; if ($p.HasExited) { exit $p.ExitCode }; Start-Sleep 1 }; exit 0"
+if errorlevel 1 goto restore
+goto :eof
+:restore
+echo Job-o-Matic: the new version did not start; putting the previous version back.
+if exist app rmdir /s /q app
+if exist python rmdir /s /q python
+move app.prev app >nul
+move python.prev python >nul
+goto giveup
+:putapp
+move app.prev app >nul
+:giveup
+if exist .update rmdir /s /q .update
+mkdir .update
+type nul > .update\FAILED
+:run
+start "" python\pythonw.exe app\src\jobomatic\helper.py --open
+""".replace("TRIAL_DEFAULT", str(TRIAL_SECONDS))
+
 LAUNCHERS = {
-    "Job-o-Matic.bat": (
-        '@echo off\r\ncd /d "%~dp0"\r\n'
-        'start "" python\\pythonw.exe app\\src\\jobomatic\\helper.py --open\r\n'
-    ),
-    "Job-o-Matic.command": '#!/bin/sh\ncd "$(dirname "$0")" || exit 1\n' + RUN,
-    "job-o-matic.sh": '#!/bin/sh\ncd "$(dirname "$(readlink -f "$0")")" || exit 1\n' + RUN,
+    "Job-o-Matic.bat": BAT_LAUNCHER.replace("\n", "\r\n"),
+    "Job-o-Matic.command": SH_LAUNCHER.replace("CD_LINE", 'cd "$(dirname "$0")" || exit 1'),
+    "job-o-matic.sh": SH_LAUNCHER.replace("CD_LINE", 'cd "$(dirname "$(readlink -f "$0")")" || exit 1'),
 }
 
 
@@ -89,19 +223,15 @@ def pbs_asset(triple):
 
 
 def verified_tarballs():
+    """Each tarball must match the digest pinned in PBS_SHA256 (not a SHA256SUMS from the same server)."""
     CACHE.mkdir(parents=True, exist_ok=True)
-    sums = {}
-    (CACHE / "SHA256SUMS").unlink(missing_ok=True)
-    for line in fetch("SHA256SUMS").read_text().splitlines():
-        digest, _, name = line.partition("  ")
-        sums[name.strip().lstrip("*")] = digest
     out = {}
     for plat, triple in PLATFORMS.items():
         name = pbs_asset(triple)
-        if name not in sums:
-            sys.exit(f"ABORT: {name} not listed in SHA256SUMS")
+        if triple not in PBS_SHA256:
+            sys.exit(f"ABORT: no pinned digest for {name}")
         path = fetch(name)
-        if sha256(path) != sums[name]:
+        if sha256(path) != PBS_SHA256[triple]:
             path.unlink()
             sys.exit(f"ABORT: checksum mismatch for {name}")
         print(f"ok checksum {name}")
@@ -196,6 +326,12 @@ def add_top_level_docs(root, repo=ROOT):
     (root / "PRIVACY.md").write_text(strip_images(privacy), encoding="utf-8")
 
 
+def wheel_install_args(triple, target):
+    """uv installs only wheels whose hashes are in requirements-bundle.txt."""
+    return [str(UV), "pip", "install", "--quiet", "--target", str(target), "--python-platform", triple,
+            "--python-version", "3.13", "--only-binary", ":all:", "--require-hashes", "-r", str(REQUIREMENTS)]
+
+
 def assemble(plat, triple, tarball, files):
     root = BUILD / plat / "Job-o-Matic"
     shutil.rmtree(BUILD / plat, ignore_errors=True)
@@ -208,25 +344,7 @@ def assemble(plat, triple, tarball, files):
         sys.exit(f"ABORT: {exe} missing in {tarball.name}")
     if plat == "windows-x64" and not (pydir / "pythonw.exe").exists():
         sys.exit("ABORT: pythonw.exe missing in Windows build")
-    subprocess.run(
-        [
-            str(UV),
-            "pip",
-            "install",
-            "--quiet",
-            "--target",
-            str(site_packages(plat, pydir)),
-            "--python-platform",
-            triple,
-            "--python-version",
-            "3.13",
-            "--only-binary",
-            ":all:",
-            "-r",
-            str(ROOT / "requirements.txt"),
-        ],
-        check=True,
-    )
+    subprocess.run(wheel_install_args(triple, site_packages(plat, pydir)), check=True)
     for f in files:
         dst = root / "app" / f
         dst.parent.mkdir(parents=True, exist_ok=True)
@@ -292,6 +410,8 @@ def git(*args):
 
 
 def main():
+    if not WHATS_NEW.exists():
+        sys.exit(f"ABORT: no release notes at {WHATS_NEW}")
     if not UV.exists():
         sys.exit(f"ABORT: uv not found at {UV}")
     tarballs = verified_tarballs()
@@ -309,17 +429,17 @@ def main():
     (NOTES / "git_range.txt").write_text(
         f"HEAD at build: {head}\nrange: {root_commit}..{head}\n"
     )
-    (NOTES / "release_notes.md").write_text(RELEASE_NOTES)
+    (NOTES / "release_notes.md").write_text(release_notes())
     print(sums, end="")
     print("✅ build complete")
 
 
-RELEASE_NOTES = f"""# Job-o-Matic v{VERSION}
+RELEASE_NOTES = """# Job-o-Matic v{VERSION}
 
 Four downloads: windows-x64, macos-arm64, macos-x64, linux-x64. Each unzips to a
 `Job-o-Matic/` folder holding:
 
-- `python/`: portable CPython {PBS_PYTHON} (python-build-standalone {PBS_TAG}) with `mcp` 2.3.0 and `pypdf` 6.21.4
+- `python/`: portable CPython {PBS_PYTHON} (python-build-standalone {PBS_TAG}) with {packages}
 - `app/`: the program (src, templates, AI guide, Claude Desktop connector, licence files)
 - `my_data/jobomatic.db`: a blank database, and empty `originals/` folders
 - a launcher (`Job-o-Matic.bat`, `Job-o-Matic.command`, or `job-o-matic.sh`).
@@ -329,16 +449,7 @@ Four downloads: windows-x64, macos-arm64, macos-x64, linux-x64. Each unzips to a
 
 The demo seed (`app/src/db/seed_demo.sql`) ships but is not loaded by default.
 
-## What's new
-- **Install from PyPI.** `uvx job-o-matic-mcp` runs the MCP server with no download; `pip install job-o-matic` adds `job-o-matic` and `job-o-matic-db`. Listed in the official MCP Registry.
-
-From v1.0.0, the first public release:
-- **New data model.** Employers, then positions (a promotion is a second position under the same employer), then items: one typed table for responsibilities, achievements, awards, projects, reviews and more, with numbers in `item_metrics` and source documents linked through `item_originals`.
-- **Built for your AI.** 15 MCP tools (including `save_many` and `add_original`), a plain-language `schema_guide`, and a wiki written for AI agents. What your AI writes appears in the app within seconds, marked "Needs review" until you check it.
-- **Better prompts.** Prompts for chat-only AIs carry your real data and ask for text back; an AI-written file can come back in through Originals.
-- **Safer edits.** Remove asks first and removed rows can be restored; a date outside its job shows a warning; forms keep what you typed through reloads and save conflicts.
-- **Backups.** A checked daily copy, plus "Back up now" and "Open my folder" in Settings.
-- **Downloads.** `START HERE.txt`, `README.md` and `PRIVACY.md` at the top of the zip.
+{whats_new}
 
 ## First run
 The launchers are not code-signed, so you will see a warning once:
@@ -352,6 +463,19 @@ The launchers are not code-signed, so you will see a warning once:
 - No OCR: scanned PDFs without a text layer yield no extracted text.
 - Launchers are not code-signed; see First run above.
 """
+
+
+def bundled_packages(path=ROOT / "requirements.txt"):
+    """`mcp` 2.3.0, `phonenumbers` 9.0.44 and `pypdf` 6.21.4, from requirements.txt."""
+    pins = [line.split("==") for line in path.read_text(encoding="utf-8").splitlines() if "==" in line]
+    names = [f"`{n.strip()}` {v.strip()}" for n, v in pins]
+    return ", ".join(names[:-1]) + " and " + names[-1] if len(names) > 1 else "".join(names)
+
+
+def release_notes():
+    return RELEASE_NOTES.format(VERSION=VERSION, PBS_PYTHON=PBS_PYTHON, PBS_TAG=PBS_TAG, VIEW_NAME=VIEW_NAME,
+                                packages=bundled_packages(), whats_new=WHATS_NEW.read_text(encoding="utf-8").strip())
+
 
 if __name__ == "__main__":
     main()

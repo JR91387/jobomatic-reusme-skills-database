@@ -83,7 +83,7 @@ class UpgradeV4(unittest.TestCase):
         self.assertEqual(old.execute("PRAGMA user_version").fetchone()[0], 4)
         old.close()
         self.assertEqual(counts(backups[0]), self.before)
-        self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 5)
+        self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], store.SCHEMA_VERSION)  # 4 -> 6 in one start
         after = counts(self.db)
         for table in COUNTED:
             self.assertEqual(after[table], self.before[table], table)
@@ -228,9 +228,8 @@ class ContactNormalizing(unittest.TestCase):
 
     def test_phone_rejected(self):
         for text in ("abc", "555-0142", "12", "+44 20"):
-            with self.subTest(text=text):
-                with self.assertRaisesRegex(ValueError, "Phone number not recognized.*country code"):
-                    store.save_row(self.conn, "people", {"id": self.pid, "phone": text}, "user")
+            with self.subTest(text=text), self.assertRaisesRegex(ValueError, "Phone number not recognized.*country code"):
+                store.save_row(self.conn, "people", {"id": self.pid, "phone": text}, "user")
 
     def test_email(self):
         store.save_row(self.conn, "people", {"id": self.pid, "email": "  Pat.Doe@Example.COM "}, "user")

@@ -3,11 +3,11 @@
   "use strict";
 
   var EDIT = typeof window.HELPER_TOKEN === "string";
-  var DATA_URL = "/data.js?t=";
+  var DATA_URL = "/data.json?t=";
   var RETIRED = ["Deprecated", "Archived", "Retired"];
   var TABS = [
     ["profile", "Profile"], ["experience", "Experience"], ["items", "Items"],
-    ["lines", "Resume Lines"], ["qa", "Q&A"], ["originals", "Originals"],
+    ["lines", "Resume Lines"], ["qa", "Q&A"], ["originals", "Source files"],
     ["ai", "For the AI"], ["settings", "Settings"]
   ];
   // Reached from a header link, not a tab (#how still opens it).
@@ -29,7 +29,7 @@
   // Open form key -> { base: values shown before typing, typed: what the user typed }. Kept until Save or Cancel,
   // so re-renders (data reloads, filters, a 409) never lose typing.
   var drafts = {};
-  var upload = { kind: "", title: "" };
+  var upload = { kind: "", title: "", file: null };  // file: picked before "What is it?"; added once both are set
 
   // Edit-form fields per table: [column, label, kind, options]. kind: text | area | select | number | date
   var ITEM_KINDS = ["Project", "Responsibility", "Achievement", "Award", "Publication", "Volunteer", "Speaking",
@@ -264,10 +264,9 @@
   // ---------- helper connection (edit mode only) ----------
   function http(method, path, body) {
     if (!EDIT) return Promise.reject(new Error("Saving needs the Job-o-Matic app running"));
-    var opts = { method: method, headers: {} };
+    var opts = { method: method, headers: { "X-JobOMatic": window.HELPER_TOKEN } };
     if (body !== undefined) {
       opts.headers["Content-Type"] = "application/json";
-      opts.headers["X-JobOMatic"] = window.HELPER_TOKEN;
       opts.body = JSON.stringify(body);
     }
     return fetch(path, opts).then(function (r) {
@@ -283,24 +282,16 @@
     });
   }
 
-  function loadDataScript() {
-    return new Promise(function (resolve, reject) {
-      var old = document.getElementById("data-js");
-      if (old) old.remove();
-      var s = document.createElement("script");
-      s.id = "data-js";
-      s.src = DATA_URL + Date.now();
-      s.onload = function () { resolve(window.JOBOMATIC_DB); };
-      s.onerror = function () { reject(new Error("Could not load your data from the app (/data.js)")); };
-      document.head.appendChild(s);
-    });
+  // The data comes from GET /data.json (needs the token header): {"db": the same payload a plain file inlines as JOBOMATIC_DB}.
+  function loadData() {
+    return http("GET", DATA_URL + Date.now()).then(function (j) { return j.db; });
   }
 
   // One load at a time: focus, visibility and the 15 s check can all ask at once.
   var loading = null;
   function refresh() {
     if (!loading) {
-      loading = loadDataScript().then(function (data) {
+      loading = loadData().then(function (data) {
         loading = null;
         if (data && data.updated !== updated) useData(data);
         return data;
@@ -330,6 +321,7 @@
     db = new SQL.Database(b64ToBytes(data.b64));
     updated = data.updated;
     texts = data.texts || {};
+    if (data.templates) window.JOBOMATIC_TEMPLATES = data.templates;  // /data.json carries the styles; view-only gets them inline
     changes = {};
     q("SELECT table_name, row_id, actor FROM last_change").forEach(function (r) {
       changes[r.table_name + ":" + r.row_id] = r.actor;
@@ -529,7 +521,7 @@
     metrics: ["Numbers", "item_metrics", "the numbers that prove an item (label, value as quoted, unit, as_of), many per item; never a number the sources do not give"],
     bullet_variants: ["Resume Lines", "bullet_variants", "lines for items that have few or none, for each version and length (Short, Long, Story)"],
     qa: ["Interview questions", "qa", "questions I keep meeting (seeded = 0) and answers to the open ones"],
-    originals: ["Originals", "originals", "index unlisted files in the originals folder of my data folder, then take the facts out (list_originals, read_original, mark_extracted)"]
+    originals: ["Source files", "originals", "index unlisted files in the originals folder of my data folder, then take the facts out (list_originals, read_original, mark_extracted)"]
   };
   var CHAT_ONLY = "If you can't open files on this computer, that's fine: just give me the text and I'll paste it in myself. " +
     "The for_tools part at the end is only for AIs that can open my files.";
@@ -884,17 +876,22 @@
     if (!window.open(url, "_blank")) throw new Error("Your browser blocked the new tab. Allow pop-ups for this page and try again.");
   }
 
+  // "Executive, classic serif, ...": the comma is for screen readers and sits against the name.
+  function styleLabel(s) {
+    return h("span", null, h("b", null, s[1], h("span", { class: "sr-only" }, ",")), " ", h("span", { class: "muted" }, s[2]));
+  }
+
   var create = null;
   function createDialog() {
     if (create) return create;
     var tracks = h("select", { id: "create-track" });
     var styles = h("fieldset", { class: "create-styles" }, h("legend", null, "Style"), STYLES.map(function (s, i) {
       return h("label", { class: "create-style" }, h("input", { type: "radio", name: "create-style", value: s[0], checked: i === 0 }),
-        h("span", null, h("b", null, s[1]), h("span", { class: "sr-only" }, ", "), h("span", { class: "muted" }, s[2])));
+        styleLabel(s));
     }));
     var ad = h("textarea", { id: "create-ad", class: "ai-text", rows: 5, placeholder: "Paste the job ad here" });
     var jd = h("select", { id: "create-jd", onchange: function () { if (jd.value) { ad.value = texts[jd.value]; showLines(); } } });
-    var jdField = h("div", { class: "field" }, h("label", { for: "create-jd", class: "small" }, "Use a job description from Originals"), jd);
+    var jdField = h("div", { class: "field" }, h("label", { for: "create-jd", class: "small" }, "Use a job description from Source files"), jd);
     var msg = h("p", { class: "ai-msg create-msg", role: "alert" });
     function picked() { return [styles.querySelector("input:checked").value, tracks.value]; }
     var box = h("div", { class: "preview-box", "aria-hidden": "true" });
@@ -1001,7 +998,11 @@
   function jobText(r) { return r.position_id ? joinNonEmpty([r.job_title, r.employer], " — ") : ""; }
   // An item as people say it: its title, else what was done, else its kind. Never cut short (it names buttons).
   function itemName(r) { return r.title || r.detail || r.kind; }
-  function shortText(text, n) { return text.length > n ? text.slice(0, n - 1) + "\u2026" : text; }
+  function shortText(text, n) {
+    if (text.length <= n) return text;
+    var cut = text.slice(0, n - 1), sp = cut.lastIndexOf(" ");
+    return (sp > n / 2 ? cut.slice(0, sp) : cut) + "\u2026";  // end on a whole word when there is one
+  }
   // [Item, original] pairs and metrics are read live, so a detail pop-up and a card always agree.
   function itemMetrics(id) {
     return q("SELECT * FROM item_metrics WHERE item_id = ? ORDER BY sort, id", [id]);
@@ -1061,10 +1062,10 @@
         nums.length ? h("ul", { class: "detail-lines" }, nums.map(function (m) {
           return h("li", null, h("p", null, metricText(m)), h("p", { class: "small muted" }, joinNonEmpty([m.label, m.as_of ? "As of " + m.as_of : "", "Status: " + shown(m.status)])));
         })) : h("p", { class: "muted" }, "No numbers yet."),
-        h("h3", null, "Attached originals (" + files.length + ")"),
+        h("h3", null, "Attached source files (" + files.length + ")"),
         files.length ? h("ul", { class: "detail-lines" }, files.map(function (f) {
           return h("li", null, h("p", null, originalName(f)), f.note ? h("p", { class: "small muted" }, f.note) : null);
-        })) : h("p", { class: "muted" }, "No originals attached."),
+        })) : h("p", { class: "muted" }, "No source files attached."),
         h("h3", null, "Resume lines (" + lines.length + ")"),
         lines.length ? h("ul", { class: "detail-lines" }, lines.map(function (l) {
           return h("li", null, h("p", null, l.wording), h("p", { class: "small muted" }, joinNonEmpty([
@@ -1273,11 +1274,11 @@
       var self = opts && opts[0] ? opts[0] : null;
       return [["", "Not inside another item"]].concat(q("WITH RECURSIVE inside(id) AS (SELECT ? UNION SELECT i.id FROM items i JOIN inside ON i.parent_item_id = inside.id)" +
         " SELECT id, kind, title, detail FROM items WHERE (status <> 'Deprecated' OR id = ?) AND id NOT IN (SELECT id FROM inside) ORDER BY id",
-        [self, val || null]).map(function (a) { return [String(a.id), shortText(a.kind + ": " + itemName(a), 70)]; }));
+        [self, val || null]).map(function (a) { return [String(a.id), shortText(a.kind + ": " + itemName(a), 110)]; }));
     }
     if (kind === "item") {
       return q("SELECT id, kind, title, detail FROM items WHERE status <> 'Deprecated' OR id = ? ORDER BY id", [val || null]).map(function (a) {
-        return [String(a.id), shortText(itemName(a), 70)];
+        return [String(a.id), shortText(itemName(a), 110)];
       });
     }
     if (kind === "track") {
@@ -1314,7 +1315,10 @@
       var col = f[0], kind = f[2] || "text", id = uid + "-" + col, options = null;
       var val = start[col] === null || start[col] === undefined ? "" : String(start[col]);
       if (kind === "select" || kind === "job" || kind === "position" || kind === "employer" || kind === "parent" || kind === "item" || kind === "track") {
-        var c = choices(kind, typeof f[3] === "function" ? f[3](row) : f[3] || [], val, !row);
+        var list = typeof f[3] === "function" ? f[3](row) : f[3] || [];
+        // Remove is its own action: "Removed" is only listed for a row that already is removed.
+        if (col === "status" && RETIRED.indexOf(val) < 0) list = list.filter(function (o) { return RETIRED.indexOf(o) < 0; });
+        var c = choices(kind, list, val, !row);
         options = c[0];
         val = c[1];
       }
@@ -1550,7 +1554,7 @@
       "A promotion is a second position under the same employer.", addButton("employers", "Add an employer", { status: "Verified" }));
     out.push(newForm("employers", "New employer"));
     if (!employers.length && state.editing !== "new:employers") {
-      out.push(empty("No employers yet", "Ask your AI to read your past resumes in Originals, or add an employer here."));
+      out.push(empty("No employers yet", "Ask your AI to read your past resumes in Source files, or add an employer here."));
       return out;
     }
     employers.forEach(function (m) {
@@ -1599,11 +1603,11 @@
         })) : addingNumber ? null : h("p", { class: "muted small" }, "No numbers yet."),
         addingNumber ? h("article", { class: "card editing" }, h("p", { class: "row-title" }, "New number"), form("item_metrics", null)) : null,
         addButton("item_metrics", "Add a number", { item_id: String(r.id), status: "Verified", sort: "100" }, "Add a number to " + name)),
-      h("div", { class: "item-part attachments" }, h("p", { class: "row-sub" }, "Originals attached"),
+      h("div", { class: "item-part attachments" }, h("p", { class: "row-sub" }, "Source files attached"),
         files.length ? h("ul", { class: "attach-list" }, files.map(function (f) {
           return h("li", { class: "attach-item" }, card("item_originals", f, "Attached: " + originalName(f), f.note, null,
             [f.original_kind, isRetired(f) ? statusEl(f.status) : null]));
-        })) : h("p", { class: "muted small" }, "No originals attached."),
+        })) : h("p", { class: "muted small" }, "No source files attached."),
         EDIT ? attachPicker(r, ctx.files[r.id] || [], name) : null),
       lines.length ? h("ul", { class: "sub-lines tree", "aria-label": "Resume lines written from this" }, lines.map(function (l) {
         return h("li", null, l.wording, " ", lineChip(l));
@@ -1617,12 +1621,12 @@
     links.forEach(function (l) { if (!isRetired(l)) linked[l.original_id] = true; });
     var free = q("SELECT id, title, path FROM originals ORDER BY doc_date DESC, id DESC").filter(function (o) { return !linked[o.id]; });
     if (!free.length) return null;
-    var pick = h("select", { class: "attach-pick", id: "attach-" + item.id, "aria-label": "Original to attach to " + name },
-      h("option", { value: "" }, "Attach an original\u2026"), free.map(function (o) {
+    var pick = h("select", { class: "attach-pick", id: "attach-" + item.id, "aria-label": "Source file to attach to " + name },
+      h("option", { value: "" }, "Attach a source file\u2026"), free.map(function (o) {
         return h("option", { value: String(o.id) }, o.title || o.path.split("/").pop());
       }));
     return h("div", { class: "attach-add" }, pick,
-      h("button", { type: "button", class: "btn quiet", "aria-label": "Attach the chosen original to " + name,
+      h("button", { type: "button", class: "btn quiet", "aria-label": "Attach the chosen source file to " + name,
         onclick: function () { attachOriginal(item, pick, this); } }, "Attach"));
   }
   function attachOriginal(item, pick, btn) {
@@ -1769,13 +1773,13 @@
 
   VIEWS.originals = function () {
     var rows = q("SELECT * FROM originals ORDER BY doc_date DESC, id DESC");
-    var out = sectionHead("Originals", "Your unedited source files: past resumes, job descriptions, reviews, letters. " +
+    var out = sectionHead("Source files", "Your unedited source files: past resumes, job descriptions, reviews, letters. " +
       "They stay as they are; facts taken from them go into the other tabs.");
     out.push(EDIT ? dropZone() : h("p", { class: "notice" },
       "Adding files needs the Job-o-Matic app running (this page is a view-only copy). " +
       "You can also put files in the originals folder and ask your AI to index them."));
     if (!rows.length) {
-      out.push(empty("No originals yet", "Add an old resume or a performance review to get started."));
+      out.push(empty("No source files yet", "Add an old resume or a performance review to get started."));
       return out;
     }
     var usedBy = {};  // original id -> the items it backs up (item_originals)
@@ -1793,7 +1797,7 @@
           r.extracted === "Text read" || r.extracted === "Not yet" ? h("p", { class: "small" }, "Your AI will read this. Nothing was filled in yet.") : null,
           originalText(r)],
         [h("span", { class: "weight" }, WEIGHT[r.weight] || r.weight), "Facts taken out: ", statusEl(r.extracted),
-          EDIT ? h("a", { href: "/original/" + r.id, download: name, "aria-label": "Open " + (r.title || name) }, "Open") : null]);
+          EDIT ? h("a", { href: "/original/" + r.id + "?k=" + encodeURIComponent(window.HELPER_TOKEN), download: name, "aria-label": "Open " + (r.title || name) }, "Open") : null]);
     })));
     return out;
   };
@@ -1858,12 +1862,12 @@
   // "What is it?" and Title come first; the file is added when it is chosen or dropped. Both survive re-renders.
   function dropZone() {
     var c = choices("select", ORIGINAL_KINDS, upload.kind, true);
-    var kind = h("select", { id: "up-kind", onchange: function () { upload.kind = this.value; } }, c[0].map(function (o) {
+    var kind = h("select", { id: "up-kind", onchange: function () { upload.kind = this.value; if (upload.file && this.value) send(upload.file); } }, c[0].map(function (o) {
       return h("option", { value: o[0], selected: o[0] === c[1] }, o[1]);
     }));
     var title = h("input", { id: "up-title", type: "text", placeholder: "Optional", value: upload.title,
       oninput: function () { upload.title = this.value; } });
-    var msg = h("p", { class: "small", id: "up-msg" });
+    var msg = h("p", { class: "small", id: "up-msg" }, upload.file ? "Chosen: " + upload.file.name + ". Now choose what it is." : "");
     var picker = h("input", { type: "file", id: "up-file", class: "visually-hidden", style: "position:absolute;left:-9999px",
       onchange: function () { if (this.files.length) send(this.files[0]); this.value = ""; } });
     var zone = h("div", { class: "drop" },
@@ -1889,10 +1893,12 @@
     }
     function send(file) {
       if (!kind.value) {
-        say("Choose what it is first, then add the file again.");
+        upload.file = file;  // kept: it is added as soon as the type is chosen
+        say("Chosen: " + file.name + ". Now choose what it is.");
         kind.focus();
         return;
       }
+      upload.file = null;
       say("Adding " + file.name + "…");
       var reader = new FileReader();
       reader.onerror = function () { showError("Could not read " + file.name); };
@@ -1901,7 +1907,7 @@
         http("POST", "/upload", { filename: file.name, kind: kind.value, title: title.value.trim() || null,
           data_b64: String(reader.result).split(",")[1] || "" })
           .then(function (res) {
-            upload = { kind: "", title: "" };
+            upload = { kind: "", title: "", file: null };
             return waitForRebuild(before, 25).then(function () { return res.id; });
           })
           .then(function (id) { say("Added " + file.name + ".", "small ok-msg"); focusItem("originals:" + id); })
@@ -1934,7 +1940,7 @@
       h("p", null, h("a", { href: "#ai", onclick: function (e) { e.preventDefault(); if (go("ai")) focusItem(null); } }, "See the full map in For the AI"),
         ": every table and how they link."),
       h("h3", null, "Getting started"),
-      h("p", null, "Give your AI an old resume (drop it in Originals) and ask it to fill in your profile. "
+      h("p", null, "Give your AI an old resume (drop it in Source files) and ask it to fill in your profile. "
         + "Then work through the Q&A tab together, and add the questions you meet in real interviews.")));
     return out;
   };
@@ -2217,6 +2223,7 @@
       extracted: extractedOptions };
     window.JOM_TEST.phone = { format: fmtPhone, name: personName, workAuth: workAuthText };
     window.JOM_TEST.state = state;
+    window.JOM_TEST.c3 = { loadData: loadData, styleLabel: styleLabel, styles: STYLES, shortText: shortText };
     window.JOM_TEST.tabs = TABS;
     window.JOM_TEST.dates = { record: recordDate, job: span, warning: dateWarning };
     window.JOM_TEST.remove = { question: removeQuestion, live: liveStatus };

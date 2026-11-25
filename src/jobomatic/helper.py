@@ -12,6 +12,7 @@ import hashlib
 import json
 import mimetypes
 import os
+import re
 import secrets
 import socket
 import sqlite3
@@ -20,6 +21,7 @@ import sys
 import threading
 import time
 import traceback
+import urllib.parse
 import webbrowser
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -36,6 +38,9 @@ WEB_DIR = paths.resource("web")
 APP_PATH = "/jobomatic/"
 PORTS = range(8765, 8770)
 IDLE_SECONDS = 20 * 60
+RESTART_ENV = "JOBOMATIC_RESTARTED"  # set by restart(): don't open another browser tab
+PORT_ENV = "JOBOMATIC_RESTART_PORT"  # set by restart(): listen on the same port so the page reconnects
+WAIT_ENV = "JOBOMATIC_WAIT_PID"  # set by restart() for the zip launcher: wait for this process to exit
 JSON_LIMIT = 1024 * 1024
 UPLOAD_LIMIT = MAX_BYTES * 4 // 3 + 64 * 1024  # base64 inflates by 4/3
 DEBOUNCE = 0.2
@@ -49,9 +54,15 @@ CONTENT_TYPES = {
 }
 
 
+def content_disposition(name):
+    """RFC 6266/5987: an ASCII fallback plus filename*=UTF-8'' for any other characters."""
+    ascii_name = re.sub(r'[^A-Za-z0-9._ -]', "_", name.encode("ascii", "replace").decode()) or "download"
+    return f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{urllib.parse.quote(name, safe='')}"
+
+
 def on_change(db_path):
     """Runs (coalesced, on a background thread) after every successful write."""
-    viewer.build(db_path)
+    viewer.build(db_path, defer_html=True)  # the view-only page follows when quiet, and at exit
 
 
 def backup_now(db_path):
@@ -119,6 +130,9 @@ class HelperServer(ThreadingHTTPServer):
         self.token = secrets.token_urlsafe(32)
         self.idle_seconds = idle_seconds
         self.last_request = time.monotonic()
+        self.boot = secrets.token_hex(8)  # changes on every start: the page sees a restart through /health
+        self.restart = None  # 'exec' or 'launcher' after a successful update
+        self.update_lock = threading.Lock()
         self.changes = Coalescer(hook or (lambda: on_change(self.db_path)))
         super().__init__(("127.0.0.1", self._pick_port(port)), Handler)
         self.port = self.server_address[1]
@@ -151,6 +165,8 @@ class HelperServer(ThreadingHTTPServer):
     def server_close(self):
         super().server_close()
         self.changes.stop()
+        if not hasattr(self, "port_file"):  # the bind failed (a taken port): nothing was written
+            return
         try:
             if json.loads(self.port_file.read_text(encoding="utf-8")).get("pid") == os.getpid():
                 self.port_file.unlink()
@@ -189,6 +205,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Content-Security-Policy", "frame-ancestors 'none'")
         for k, v in extra:
             self.send_header(k, v)
         self.end_headers()
@@ -204,21 +222,45 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/app" or path.startswith("/app/"):  # the address before v1.2.0
             return self._send(302, b"", "text/plain", [("Location", APP_PATH + path[len("/app/"):])])
         if path == "/health":
-            return self._json(200, {"ok": True})
+            return self._send(200, json.dumps({"ok": True}).encode(), "application/json",
+                              [("X-JobOMatic-Boot", self.server.boot)])
         if path == "/update-status":
             return self._json(200, updates.check(self.server.data_dir))
-        if path == "/data.js":
-            return self._file(self.server.data_dir / "viewer_data.js", "text/javascript; charset=utf-8")
+        if path == "/data.json":
+            self._require_token()
+            return self._json(200, self._data())
         if path.startswith("/original/"):
+            self._require_token(allow_query=True)
             return self._original(path[len("/original/"):])
         if path.startswith(APP_PATH):
             return self._app(path[len(APP_PATH):])
         raise HttpError(404, "Not found")
 
-    def _file(self, file, ctype):
+    def _require_token(self, allow_query=False):
+        """GETs that return private data: the per-start token (header, or ?k= for links) and no cross-site fetch."""
+        if self.headers.get("Sec-Fetch-Site") == "cross-site":
+            raise HttpError(403, "Cross-site request refused")
+        given = self.headers.get("X-JobOMatic")
+        if given is None and allow_query:
+            given = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("k", [""])[0]
+        if not secrets.compare_digest((given or "").encode(), self.server.token.encode()):
+            raise HttpError(403, "Bad or missing token")
+
+    def _data(self):
+        """viewer_data.js as JSON: {"db": {updated, b64, texts, templates}}."""
+        file = self.server.data_dir / "viewer_data.js"
         if not file.is_file():
             raise HttpError(404, f"{file.name} not found")
-        self._send(200, file.read_bytes(), ctype)
+        text = file.read_text(encoding="utf-8")
+        db_line, _, rest = text.partition("\n")
+        m = re.fullmatch(r'window\.JOBOMATIC_DB = \{updated: "([^"]*)", b64: "([^"]*)", texts: (.*)\};', db_line, re.DOTALL)
+        if not m:
+            raise HttpError(500, "viewer_data.js is not in the expected form")
+        db = {"updated": m.group(1), "b64": m.group(2), "texts": json.loads(m.group(3))}
+        t = re.fullmatch(r"window\.JOBOMATIC_TEMPLATES = (.*);\s*", rest, re.DOTALL)
+        if t:
+            db["templates"] = json.loads(t.group(1))
+        return {"db": db}
 
     def _app(self, rel):
         web = self.server.web_dir.resolve()
@@ -250,8 +292,7 @@ class Handler(BaseHTTPRequestHandler):
             raise HttpError(404, f"File for original {raw_id} is missing")
         data = file.read_bytes()
         ctype = CONTENT_TYPES.get(sniff_type(data), "application/octet-stream")
-        name = file.name.replace('"', "")
-        self._send(200, data, ctype, [("Content-Disposition", f'attachment; filename="{name}"')])
+        self._send(200, data, ctype, [("Content-Disposition", content_disposition(file.name))])
 
     def _body(self, limit):
         if self.headers.get("Origin") not in self.server.allowed_origins:
@@ -286,7 +327,8 @@ class Handler(BaseHTTPRequestHandler):
         if path in ("/save", "/retire", "/upload"):
             self.server.changes.trigger()
         self._json(200, result)
-        if path == "/quit":  # only after the reply is sent: handler threads are daemons and die with the server
+        if path == "/quit" or (path == "/update" and self.server.restart):
+            # only after the reply is sent: handler threads are daemons and die with the server
             threading.Thread(target=self.server.shutdown).start()
 
     def _db(self):
@@ -353,7 +395,50 @@ class Handler(BaseHTTPRequestHandler):
         return {"ok": True, "check_updates": settings["check_updates"]}
 
     def _update(self, body):
-        return updates.run_update()
+        if not self.server.update_lock.acquire(blocking=False):
+            raise HttpError(409, "An update is already running")
+        try:
+            result = updates.run_update(self.server.db_path)
+        finally:
+            self.server.update_lock.release()
+        if result.get("ok") and result.get("restart"):
+            self.server.restart = result["restart"]
+            result["boot"] = self.server.boot
+        return result
+
+
+def restart(how, port):
+    """After an update: 'exec' replaces this process with the same command line (pip, uv, pipx);
+    'launcher' starts the zip's launcher, which swaps in the staged update once this process exits."""
+    env = {**os.environ, RESTART_ENV: "1", PORT_ENV: str(port)}
+    if how == "exec":
+        try:  # execve skips atexit, where a deferred view-only page would otherwise be written
+            viewer.flush_html()
+        except Exception:  # noqa: BLE001 - the restart matters more; the next change rewrites the page
+            traceback.print_exc(file=sys.stderr)
+        argv = [sys.executable, str(Path(__file__).resolve()), *sys.argv[1:]]
+        os.execve(sys.executable, argv, env)
+    cmd = updates.relaunch_command()
+    if not cmd:
+        print("Update staged: open Job-o-Matic again to finish.", file=sys.stderr)
+        return
+    if sys.platform == "win32":
+        flags = {"creationflags": subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP}
+    else:
+        flags = {"start_new_session": True}
+    subprocess.Popen(cmd, cwd=updates.bundle_root(), env={**env, WAIT_ENV: str(os.getpid())},
+                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **flags)
+
+
+def start_server(db_path):
+    """A restart asks for the port the page already uses; any other port if that one is taken."""
+    port = os.environ.pop(PORT_ENV, "")
+    if port.isdigit():
+        try:
+            return HelperServer(db_path, port=int(port))
+        except OSError:
+            pass
+    return HelperServer(db_path)
 
 
 def main():
@@ -365,6 +450,8 @@ def main():
     ap.add_argument("--no-shortcut", action="store_true",
                     help=f"don't add the app-menu entry on first run (or set {shortcuts.SKIP_ENV}=1)")
     args = ap.parse_args()
+    restarted = os.environ.pop(RESTART_ENV, "") == "1"
+    os.environ.pop(WAIT_ENV, None)
     data_dir = args.db.parent
     if args.add_shortcut or args.remove_shortcut:
         data_dir.mkdir(parents=True, exist_ok=True)
@@ -382,15 +469,18 @@ def main():
     viewer.build(args.db, backup=False)  # the day's backup waits for its first change
     if not args.no_shortcut:
         shortcuts.ensure_first_run(data_dir)
-    server = HelperServer(args.db)
+    server = start_server(args.db)
+    updates.mark_started()
     url = f"http://127.0.0.1:{server.port}{APP_PATH}"
     print(f"Job-O-Matic helper on {url}", flush=True)
-    if args.open or paths.installed():
+    if (args.open or paths.installed()) and not restarted:
         webbrowser.open(url)
     try:
         server.serve_forever()
     finally:
         server.server_close()
+    if server.restart:
+        restart(server.restart, server.port)
 
 
 if __name__ == "__main__":

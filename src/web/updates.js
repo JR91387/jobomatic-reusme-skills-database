@@ -57,6 +57,37 @@
     return b;
   }
 
+  function safeLink(url) {  // the helper only passes GitHub links; never follow any other scheme
+    return typeof url === "string" && url.indexOf("https://") === 0 ? url : null;
+  }
+
+  function note(text) {  // one line after a restart: "Updated to X…" or "put the previous version back"
+    bar.textContent = "";
+    styleBar();
+    bar.appendChild(el("span", text));
+    var close = el("button", "OK", { type: "button" });
+    close.addEventListener("click", function () { setShown(false); });
+    bar.appendChild(close);
+    setShown(true);
+  }
+
+  function waitForRestart(oldBoot, out) {  // the helper restarts; reload once a new one answers /health
+    var tries = 0;
+    function poll() {
+      tries += 1;
+      fetch("/health", { cache: "no-store" }).then(function (r) {
+        var boot = r.headers.get("X-JobOMatic-Boot");
+        if (r.ok && boot && boot !== oldBoot) location.reload();
+        else later();
+      }, later);
+    }
+    function later() {
+      if (tries < 180) setTimeout(poll, 1000);
+      else out.textContent = "Job-o-Matic did not come back. Open it again from your app menu.";
+    }
+    setTimeout(poll, 1000);
+  }
+
   function show(st) {
     bar.textContent = "";
     styleBar();
@@ -71,7 +102,12 @@
         post("/update", {}).then(function (r) {
           out.textContent = r.message || (r.ok ? "Updated." : "The update did not finish.");
           if (r.output) out.title = r.output;
+          if (r.ok && r.restart) return waitForRestart(r.boot, out);
           if (!r.ok) btn.disabled = false;
+          if (!r.ok && r.command) {
+            bar.insertBefore(el("code", r.command), out.nextSibling);
+            bar.insertBefore(copyButton(r.command), out.nextSibling.nextSibling);
+          }
         }, function (e) {
           out.textContent = "The update did not finish: " + e.message;
           btn.disabled = false;
@@ -83,8 +119,8 @@
       bar.appendChild(el("span", "To update, run:"));
       bar.appendChild(el("code", st.command));
       bar.appendChild(copyButton(st.command));
-    } else {
-      bar.appendChild(el("a", "Download it", { href: st.url, target: "_blank", rel: "noopener" }));
+    } else if (safeLink(st.url)) {
+      bar.appendChild(el("a", "Download it", { href: safeLink(st.url), target: "_blank", rel: "noopener" }));
     }
     var close = el("button", "Not now", { type: "button" });
     close.addEventListener("click", function () { setShown(false); });
@@ -97,7 +133,8 @@
       if (!st) return;
       toggle.checked = !!st.enabled;
       box.hidden = false;
-      if (st.enabled && st.newer && st.latest) show(st);
+      if ((st.updated_to || st.update_failed) && st.message) note(st.message);
+      else if (st.enabled && st.newer && st.latest) show(st);
       else setShown(false);
     }, function () { /* offline or the app stopped: say nothing */ });
   }
