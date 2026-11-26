@@ -1,4 +1,4 @@
 # Bundle-only constraints for `uv pip compile` (see scripts/build_bundles.py).
 # cryptography stopped shipping macOS Intel (x86_64 / universal2) wheels after 48.0.1.
 cryptography<49; sys_platform == "darwin" and platform_machine == "x86_64"
-cryptography>=50; sys_platform != "darwin" or platform_machine != "x86_64"
+cryptography>=50.0.0; sys_platform != "darwin" or platform_machine != "x86_64"
